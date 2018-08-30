@@ -1,2 +1,3 @@
-# lysse
+# Lysse
+
 The Lysse Programming Language

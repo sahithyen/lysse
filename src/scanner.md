@@ -37,7 +37,7 @@ A token has a type, lexeme, value, start position and end position.
 | NUMBER     | `[0-9]+`              | 
 | NUMBER     | `0x[A-Za-z0-9]+`      | 
 | NUMBER     | `0b[0-1]+`            | 
-| CHAR       | `'.'`                 |
+| CHAR       | '.'                   |
 | STRING     | `".*"`                | 
 | IDENTIFIER | `[A-Za-z][A-Za-z0-9]` | 
 
@@ -49,8 +49,8 @@ A token has a type, lexeme, value, start position and end position.
 | R_SQ_BRACK | `\]`  | 
 | L_RO_BRACK | `\(`  | 
 | R_RO_BRACK | `\)`  | 
-| L_CU_BRACK | `\{`  | 
-| R_CU_BRACK | `\}`  | 
+| L_CU_BRACK | \\{   | 
+| R_CU_BRACK | \\}   | 
 | COMMA      | `,`   | 
 | PLUS       | `\+`  | 
 | MINUS      | `-`   | 

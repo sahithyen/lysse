@@ -4,18 +4,7 @@ The scanner transforms a stream of characters into a list of tokens.
 
 ## Token
 
-A token has a type, text, start position and end position.
-
-```
-+-----------------+
-| Token           |
-+-----------------+
-| Type: string    |
-| Lexeme: string  |
-| Start: Position |
-| End: Position   |
-+-----------------+
-```
+A token has a type, lexeme, value, start position and end position.
 
 ## Tokens
 

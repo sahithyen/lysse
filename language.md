@@ -7,8 +7,8 @@ Lysse is specifically designed for PIC16F6XX. As this microcontroller has many c
 Pick your first glance at Lysse:
 
 ```
-import ./time.ly
-import ./io.ly
+import "./time.ly"
+import "./io.ly"
 
 // Setup
 IO.selectBank(1)
@@ -42,7 +42,7 @@ There are just bytes (`byte`) and bits (`bit`) in Lysse.
 
 You can create one-dimensional arrays by using square brackets.
 
-* **Array literal**: [1, 2, 4, 8]
+* **Array literal**: `[1, 2, 4, 8]`, `"Hello, world!"`, `'ä'`
 
 ## Expressions
 
@@ -195,8 +195,8 @@ You can define structures, which can hold different named variables.
 
 ```
 struct Position {
-  x int
-  y int
+  x byte
+  y byte
 }
 ```
 
@@ -245,22 +245,35 @@ give you 'random' data.
 You saw many function calls in the previous chapter. Let's look at some function declarations.
 
 ```
-func foo() byte {
-  return 42
+func foo -> (result byte) {
+  result : 42
 }
 
-func sum(a byte, b byte) byte {
-  return a + b
+func sum (a byte, b byte) -> byte {
+  result : a + b
+}
+
+func safeSum (a byte, b byte) -> (c byte, overflow bit) {
+  if 255 - b >= a {
+    overflow : 1
+    return
+  }
+
+  c : a * a * b
 }
 ```
 
 Here are example function calls.
 
 ```
-let a byte : foo()
-let b byte : 2
+foo () -> (result byte)
 
-let c byte : sum(a, b)
+let a : 4
+let b : 2
+let someResult byte
+
+sum (a, b) -> (sumResult byte)
+calculate (a, b) -> (someResult, err bit)
 ```
 
 ## Block statement
@@ -282,8 +295,8 @@ func foo() { // begin of function block
 Every Lysse-file represents a module. Packages are used to organize code. You can import a package using the following statement.
 
 ```
-import ./some.ly
-import ./system/io.ly 
+import "./some.ly"
+import "./system/io.ly" 
 ```
 
 To create your own Lysse module, you have to use the package-statement. Every global variable and functions that are beginning with capital letter gets exported.
@@ -302,8 +315,8 @@ fun GetMeaningOfLife() {
 You can use the newly created Foo module as following.
 
 ```
-import ./foo.ly
-import ./binary-display.ly
+import "./foo.ly"
+import "./binary-display.ly"
 
 if not Foo.LysseIsAwesome {
   let a byte : Foo.GetMeaningOfLife()

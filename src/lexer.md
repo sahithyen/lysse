@@ -1,10 +1,10 @@
-# Scanner
+# Lexer
 
-The scanner transforms a stream of characters into a list of tokens.
+The lexer transforms a stream of characters into a list of tokens.
 
 ## Token
 
-A token has a type, lexeme, value, start position and end position.
+A token has a type, lexeme, value, start position.
 
 ## Tokens
 
@@ -67,3 +67,4 @@ A token has a type, lexeme, value, start position and end position.
 | COLON      | `:`   | 
 | SEMICOLON  | `;`   | 
 | DOT        | `.`   | 
+| EOF        | -     | 

@@ -11,6 +11,6 @@ doc:
 	doxygen doxygen.conf
 
 clean:
-	rm -r doc/
-	rm -r bin/
-	rm *.o
+	rm -fr doc/
+	rm -fr bin/
+	rm -f *.o

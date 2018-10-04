@@ -7,20 +7,20 @@ Lysse is specifically designed for PIC16F6XX. As this microcontroller has many c
 Pick your first glance at Lysse:
 
 ```
-import "./time.ly"
-import "./io.ly"
+use "./time.ly" as Time
+use "./io.ly" as IO
 
-// Setup
-IO.selectBank(1)
+/* Setup */
+call IO.selectBank (1)
 IO.TRISC[0] : 1
-IO.selectBank(0)
+call IO.selectBank (0)
 
-// Blink
+/* Blink forever */
 for {
   IO.PORTC[0] : 1
-  Time.delay(1000)
+  call Time.delay (255)
   IO.PORTC[0] : 0
-  Time.delay(1000)
+  call Time.delay (255)
 }
 ```
 
@@ -38,11 +38,11 @@ There are just bytes (`byte`) and bits (`bit`) in Lysse.
 ## Literals
 
 * **Bit literals**: `0`, `1`
-* **Byte literals**: `42`, `0x2A`, `0b00101010`
+* **Byte literals**: `42`, `0x2A`, `0b00101010`, `'a'`
 
-You can create one-dimensional arrays by using square brackets.
+You can create one-dimensional arrays by using square brackets or string literals.
 
-* **Array literal**: `[1, 2, 4, 8]`, `"Hello, world!"`, `'ä'`
+* **Array literal**: `[1, 2, 4, 8]`, `"Hello, world!"`
 
 ## Expressions
 
@@ -51,10 +51,10 @@ You can create one-dimensional arrays by using square brackets.
 Lysse supports the four basic arithmetic operations.
 
 ```
-1 + 1 // 2
-2 - 1 // 2
-1 * 2 // 2
-4 / 2 // 2
+1 + 1 /* 2 */
+2 - 1 /* 2 */
+1 * 2 /* 2 */
+4 / 2 /* 2 */
 ```
 
 ### Bitwise operations
@@ -62,17 +62,17 @@ Lysse supports the four basic arithmetic operations.
 There are two rotate operations. `<-` shifts right and puts the LSB to the MSB. `->` shifts left and puts the LSB to the MSB. The left operand is the manipulated byte and the right operand is the number of rotates.
 
 ```
-0b00000001 -> 1 // 0b10000000
-0b10000010 <- 2 // 0b00001010
+0b00000001 -> 1 /* 0b10000000 */
+0b10000010 <- 2 /* 0b00001010 */
 ```
 
-If you use numbers with the operators `and`, `or`, `xor` or 'not', the logic is applied bitwise.
+If you use the operators `and`, `or`, `xor` or 'not', the logic is applied for every bit.
 
 ```
-0b10101010 and 0b11110000 // 0b10100000
-0b10101010 or 0b11110000 // 0b11110000
-0b10101010 xor 0b11110000 // 0b01011010
-not 0b10101010 // 0b01010101
+0b10101010 and 0b11110000 /* 0b10100000 */
+0b10101010 or 0b11110000 /* 0b11110000 */
+0b10101010 xor 0b11110000 /* 0b01011010 */
+not 0b10101010 /* 0b01010101 */
 ```
 
 ### Comparison
@@ -80,12 +80,12 @@ not 0b10101010 // 0b01010101
 Comparsion expressions always output a bit. Here are comparison expressions. Note that the equal operator isn't `==`.
 
 ```
-2 = 4 // 0
-2 != 4 // 1
-2 < 4 // 1
-2 <= 4 // 1
-2 > 4 // 0
-2 >= 4 // 0
+2 = 4 /* 0 */
+2 != 4 /* 1 */
+2 < 4 /* 1 */
+2 <= 4 /* 1 */
+2 > 4 /* 0 */
+2 >= 4 /* 0 */
 ```
 
 ## Variables
@@ -93,14 +93,14 @@ Comparsion expressions always output a bit. Here are comparison expressions. Not
 Variables store a value in memory. You can declare a variable like this:
 
 ```
-let a byte // Default value: 0
+let a byte /* Default value: 0 */
 let b byte : 2
-let c bit // Default value: 0
+let c bit /* Default value: 0 */
 let c bit : 1
 const meaningOfLife byte : 42
 ```
 
-At the beginning of the variable you define if your variable is reassignable (`const`) or not (`let`). Then comes the name of the variable. Then comes the type of the variable. Finally you can assign a value to the new variable, if you want. Note that the assignment operator is `:`.
+At the beginning of the variable you define if your variable is reassignable (`const`) or not (`let`). Then comes the name of the variable. Then comes the type of the variable. You also can assign a value to the new variable, if you want to. Note that the assignment operator is `:`.
 
 To assign a new value to a variable, you can do the following:
 
@@ -124,7 +124,7 @@ You can access and manipulate single bits of a byte by using `[index]`.
 
 ```
 let sixteen byte : 0b00000000
-sixteen[5] : 1 // 0b00010000
+sixteen[5] : 1 /* 0b00010000 */
 ```
 
 A single bit is treated as a boolean.
@@ -139,9 +139,9 @@ An if-statement does execute the following statement if the condition does outpu
 
 ```
 if a = 2 {
-  foo()
+  call foo
 } else if a = 4 {
-  bar()
+  call bar
   a : 2
 } else {
   a : 4
@@ -156,32 +156,25 @@ Let's begin with the for-loop you are probably familiar with.
 
 ```
 for let i byte : 0; i < 8; i : i + 1 {
-  a<i> : 1
+  a[i] : 1
 }
 ```
 
 You can drop the init-statement and the post-statement, ...
 
 ```
-for ; a < 90; {
-  foo()
-}
-```
-
-... which is the same as this:
-
-```
 for a < 90 {
-  foo()
+  call foo
 }
 ```
-This behaves like a while-loop and that's why Lysse has no need for other loops.
+
+The snippet above behaves like a while-loop and that is why Lysse has no need for other loops.
 
 If you also drop the condition, Lysse will insert `true`.
 
 ```
 for {
-  blink() // I'll blink forever
+  call blink /* I will blink forever */
 }
 ```
 
@@ -195,7 +188,7 @@ You can define structures, which can hold different named variables.
 
 ```
 struct Position {
-  x byte
+  x byte,
   y byte
 }
 ```
@@ -203,12 +196,12 @@ struct Position {
 You can use the previous defined structure in the following way:
 
 ```
-pos Positon : {
-  .x : 2
-  .y : 4
+let pos Positon : {
+  x : 2,
+  y : 4
 }
 
-move(pos)
+call move (pos)
 
 pos.x : 3
 ```
@@ -219,41 +212,41 @@ If you want to save space and have cases where you need just one of several
 data types at a time. Here is an union examle.
 
 ```
-struct SensorASetting {
-  sensitivity byte
+struct SensorASetting (
+  sensitivity byte,
   threshold byte
-}
+)
 
-struct SensorBSetting {
-  sensitivity byte
+struct SensorBSetting (
+  sensitivity byte,
   mode bit
-}
+)
 
-union SensorSetting {
-  A SensorASetting
+union SensorSetting (
+  A SensorASetting,
   B SensorBSetting
-}
+)
 ```
 
 An union needs as much space as the biggest data structure in the union.
 
 Bear in mind that accessing a member of an union that is not set before can
-give you 'random' data.
+give you unexpected data.
 
 ## Functions
 
 You saw many function calls in the previous chapter. Let's look at some function declarations.
 
 ```
-func foo -> (result byte) {
+funciton foo () -> (result byte) {
   result : 42
 }
 
-func sum (a byte, b byte) -> byte {
+function sum (a byte, b byte) -> (byte) {
   result : a + b
 }
 
-func safeSum (a byte, b byte) -> (c byte, overflow bit) {
+function safeSum (a byte, b byte) -> (c byte, overflow bit) {
   if 255 - b >= a {
     overflow : 1
     return
@@ -266,14 +259,14 @@ func safeSum (a byte, b byte) -> (c byte, overflow bit) {
 Here are example function calls.
 
 ```
-foo () -> (result byte)
+call foo -> (result byte)
 
 let a : 4
 let b : 2
 let someResult byte
 
-sum (a, b) -> (sumResult byte)
-calculate (a, b) -> (someResult, err bit)
+call sum (a, b) -> (sumResult byte)
+call calculate (a, b) -> (someResult, err bit)
 ```
 
 ## Block statement
@@ -281,13 +274,13 @@ calculate (a, b) -> (someResult, err bit)
 A block is a statement which includes many statements enclosed in `{}`. You already saw many block statemnts.
 
 ```
-func foo() { // begin of function block
-  let a bit : bar()
+function foo () { /* begin of function block */
+  call bar -> (a bit)
 
-  if a { // begin of if block
-    bar2()
-  } // end of if block
-} // end of function block
+  if a { /* begin of if block */
+    call doSomething
+  } /* end of if block */
+} /* end of function block */
 ```
 
 ## Modules
@@ -295,38 +288,36 @@ func foo() { // begin of function block
 Every Lysse-file represents a module. Packages are used to organize code. You can import a package using the following statement.
 
 ```
-import "./some.ly"
-import "./system/io.ly" 
+use "./some.ly" as some
+use "./system/io.ly" as systemIO 
 ```
 
-To create your own Lysse module, you have to use the package-statement. Every global variable and functions that are beginning with capital letter gets exported.
+Every global variable and function that is beginning with a capital letter is accessible from the outside.
 
+./foo.ly
 ```
-module Foo
-
 const meaningOfLife byte : 42
 const LysseIsAwesome bit : 0
 
-fun GetMeaningOfLife() {
-  return meaningOfLife()
+function GetMeaningOfLife -> (mol byte) {
+  mol = meaningOfLife
 }
 ```
 
-You can use the newly created Foo module as following.
+You can use the newly created module as following.
 
+./main.ly
 ```
-import "./foo.ly"
-import "./binary-display.ly"
 
 if not Foo.LysseIsAwesome {
-  let a byte : Foo.GetMeaningOfLife()
-  BinaryDisplay.Show(a)
+  call Foo.GetMeaningOfLife -> (a byte)
+  call BD.Show (a)
 }
 ```
 
 # Scopes
 There are 2 different types of scopes: module scope and block scope.
 
-In module scope you can import modules, add variables and add functions. These are available in the whole module (file).
+In module scope you can import modules, add variables and add functions. These are then available in the whole module (file).
 
-In block scope there are only block variables. These are only available in the block.
+In block scope there are only block variables. These are only in the block and inner blocks.

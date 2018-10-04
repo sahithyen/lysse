@@ -10,6 +10,6 @@
 #include <stdio.h>
 
 int main(int argc, char **argv) {
-  printf("Lysse compiler");
+  printf("Lysse compiler\n");
   return 0;
 }

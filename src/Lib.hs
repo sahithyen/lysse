@@ -3,26 +3,13 @@ module Lib
   )
 where
 
+import Lexer (llex)
 import System.IO
-
-fsplit :: Char -> String -> (String, String)
-fsplit _ "" = ("", "")
-fsplit seperator (c : cs)
-  | c == seperator = ([], cs)
-  | otherwise = (c : n, ns)
-  where
-    (n, ns) = fsplit seperator cs
-
-split :: Char -> String -> [String]
-split _ "" = []
-split seperator text = word : split seperator rest
-  where
-    (word, rest) = fsplit seperator text
 
 someFunc :: IO ()
 someFunc = do
-  putStr "Input some text: "
+  putStr "Input lysse code: "
   hFlush stdout
   inp <- getLine
-  print (split ' ' inp)
+  print (llex inp)
   return ()

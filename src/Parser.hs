@@ -1,15 +1,17 @@
 {-# LANGUAGE LambdaCase #-}
 
-module Parser where
+module Parser () where
 
 import Control.Applicative (Alternative (..))
 import Data.List (nub)
+import Data.Word (Word64)
+import Lexer (Token (LTIdentifier))
 
 data Error i e
-  = EndOfInput -- Expected more input, but there is nothing
-  | Unexpected i -- We didn't expect to find this element
-  | CustomError e -- Extra errors the user may want to create
-  | Empty -- Used in `Alternative` implementation of `empty`
+  = EndOfInput
+  | Unexpected i
+  | CustomError e
+  | Empty
   deriving (Eq, Show)
 
 newtype Parser i e a = Parser
@@ -46,15 +48,22 @@ instance (Eq i, Eq e) => Alternative (Parser i e) where
           Right (output, rest) -> Right (output, rest)
       Right (output, rest) -> Right (output, rest)
 
-satisfy :: (a -> Bool) -> Parser a e a
-satisfy predicate = Parser $ \case
+newtype LAIdentifier = LAIdentifier
+  {getId :: String}
+  deriving (Show, Eq)
+
+data LAExpression
+  = LAAddition LAExpression LAExpression
+  | LASubtraction LAExpression LAExpression
+  | LAInteger Word64
+  deriving (Show)
+
+data LAStatement = LAOutput LAIdentifier | LAAssignment LAIdentifier LAExpression
+  deriving (Show)
+
+identifier :: Parser Token e LAIdentifier
+identifier = Parser $ \case
   [] -> Left [EndOfInput]
-  hd : rest
-    | predicate hd -> Right (hd, rest)
-    | otherwise -> Left [Unexpected hd]
-
-char :: Eq i => i -> Parser i e i
-char = satisfy . (==)
-
-string :: Eq i => [i] -> Parser i e [i]
-string = traverse char
+  hd : rest -> case hd of
+    LTIdentifier str -> Right (LAIdentifier str, rest)
+    _ -> Left [Unexpected hd]

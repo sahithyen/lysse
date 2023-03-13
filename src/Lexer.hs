@@ -11,7 +11,7 @@ data Token
   | LTMinus
   | LTOutput
   deriving
-    (Show)
+    (Show, Eq)
 
 takeIdentifier :: String -> (String, String)
 takeIdentifier "" = ("", "")

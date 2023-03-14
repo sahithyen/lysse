@@ -2,6 +2,9 @@
 
 module Generation (generate) where
 
+import Control.Monad.State (execStateT, get, put)
+import Control.Monad.State.Lazy (StateT)
+import Control.Monad.Writer.Lazy
 import Data.Binary (Word16, Word32, Word64, Word8)
 import Data.Binary.Put (PutM, putWord16le, putWord32be, putWord32le, putWord64le, putWord8)
 import Data.Bits (shift, (.|.))
@@ -102,32 +105,46 @@ elfProgramHeader parameters = do
 
 type RelocationTable = Map String Word64
 
-newtype Relocatable a = Reloc (RelocationTable -> a)
+type RelocatableInstruction = RelocationTable -> Word32
 
-instance Functor Relocatable where
-  fmap f (Reloc r) = Reloc $ \rt -> f (r rt)
+type RoutineState = (Word64, RelocationTable)
 
-instance Applicative Relocatable where
-  pure a = Reloc $ const a
+type RoutineWriter = StateT RoutineState (Writer [RelocatableInstruction])
 
-  Reloc f <*> Reloc p = Reloc $ \rt -> f rt (p rt)
+addRelocatableInstruction :: RelocatableInstruction -> RoutineWriter ()
+addRelocatableInstruction instruction = do
+  (cl, rt) <- get
+  put (cl + 4, rt)
+  tell $ pure instruction
 
-instance Monad Relocatable where
-  return = pure
+addInstruction :: Word32 -> RoutineWriter ()
+addInstruction = addRelocatableInstruction . const
 
-  p >>= k = Reloc (\rt -> relocate (k (relocate p rt)) rt)
+addLabel :: String -> RoutineWriter ()
+addLabel label = do
+  (cl, rt) <- get
+  put (cl, insert label cl rt)
 
-relocate :: Relocatable a -> RelocationTable -> a
-relocate (Reloc fn) = fn
+getLabel :: String -> RoutineWriter Word64
+getLabel l = do
+  (_, rt) <- get
+  case Data.Map.lookup l rt of
+    Just address -> do return address
+    _ -> error ("Label '" ++ l ++ "' not found in relocation table")
 
-movzw :: Word8 -> Word16 -> Relocatable Word32
-movzw reg imm = Reloc (\_ -> (0x52_80_00_00 :: Word32) .|. shift (fromIntegral imm :: Word32) 5 .|. (fromIntegral reg :: Word32))
+movzw :: Word8 -> Word16 -> RoutineWriter ()
+movzw reg imm = addInstruction $ (0x52_80_00_00 :: Word32) .|. shift (fromIntegral imm :: Word32) 5 .|. (fromIntegral reg :: Word32)
 
-movzx :: Word8 -> Word16 -> Relocatable Word32
-movzx reg imm = Reloc (\_ -> (0xd2_80_00_00 :: Word32) .|. shift (fromIntegral imm :: Word32) 5 .|. (fromIntegral reg :: Word32))
+movzx :: Word8 -> Word16 -> RoutineWriter ()
+movzx reg imm = addInstruction $ (0xd2_80_00_00 :: Word32) .|. shift (fromIntegral imm :: Word32) 5 .|. (fromIntegral reg :: Word32)
 
-svc :: Word16 -> Relocatable Word32
-svc imm = Reloc (\_ -> (0xd4_00_00_01 :: Word32) .|. shift (fromIntegral imm :: Word32) 5)
+svc :: Word16 -> RoutineWriter ()
+svc imm = addInstruction $ (0xd4_00_00_01 :: Word32) .|. shift (fromIntegral imm :: Word32) 5
+
+b :: String -> RoutineWriter ()
+b label = do
+  address <- getLabel label
+  addInstruction $ fromIntegral address
 
 r0 :: Word8
 r0 = 0
@@ -135,16 +152,13 @@ r0 = 0
 r8 :: Word8
 r8 = 8
 
-routine :: Functor f => f (Relocatable b) -> Relocatable (f b)
-routine a = Reloc (\rt -> fmap (`relocate` rt) a)
-
-exitRoutine :: Word16 -> Relocatable [Word32]
-exitRoutine exitCode =
-  routine
-    [ movzx r0 exitCode,
-      movzw r8 93,
-      svc 0
-    ]
+exitRoutine :: Word16 -> RoutineWriter ()
+exitRoutine exitCode = do
+  movzx r0 exitCode
+  addLabel "hello"
+  movzw r8 93
+  svc 0
+  b "hello"
 
 putRoutine :: [Word32] -> PutM ()
 putRoutine [] = pure ()
@@ -152,18 +166,23 @@ putRoutine (x : xs) = do
   putWord32le x
   putRoutine xs
 
+relocate :: [RelocatableInstruction] -> RelocationTable -> [Word32]
+relocate routine rt = routine <*> pure rt
+
 generate :: Data.Binary.Put.PutM ()
 generate = do
   elfHeader (ELFHeader executionEntryAddress programHeadersEntrySize programHeadersCount)
-  elfProgramHeader (ELFProgramHeader programFileOffset loadAddress loadAddress programSize programSize)
-  putRoutine (relocate (exitRoutine 4) empty)
+  elfProgramHeader (ELFProgramHeader programFileOffset loadAddress loadAddress programFileSize programFileSize)
+  putRoutine program
   where
+    ((programSize, relocationTable), relocatableProgram) = runWriter (execStateT (exitRoutine 4) (0, empty))
+    program = relocate relocatableProgram relocationTable
     elfHeaderSize = 0x40
     programHeadersEntrySize = 0x38
     programHeadersCount = 1
     programHeadersSize = programHeadersEntrySize * programHeadersCount
     headerSize = fromIntegral (elfHeaderSize + programHeadersSize)
     programFileOffset = 0 -- Offset in file needs to be a multiple of the page size (page size in arm: 4096 bytes)
-    programSize = headerSize + 12
+    programFileSize = headerSize + programSize
     loadAddress = 0
     executionEntryAddress = loadAddress + headerSize

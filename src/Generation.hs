@@ -152,14 +152,6 @@ r0 = 0
 r8 :: Word8
 r8 = 8
 
-exitRoutine :: Word16 -> RoutineWriter ()
-exitRoutine exitCode = do
-  movzx r0 exitCode
-  addLabel "hello"
-  movzw r8 93
-  svc 0
-  b "hello"
-
 putRoutine :: [Word32] -> PutM ()
 putRoutine [] = pure ()
 putRoutine (x : xs) = do
@@ -169,13 +161,16 @@ putRoutine (x : xs) = do
 relocate :: [RelocatableInstruction] -> RelocationTable -> [Word32]
 relocate routine rt = routine <*> pure rt
 
+assembleRoutine :: RoutineWriter () -> (RoutineState, [RelocatableInstruction])
+assembleRoutine routine = runWriter (execStateT routine (0, empty))
+
 generate :: Data.Binary.Put.PutM ()
 generate = do
   elfHeader (ELFHeader executionEntryAddress programHeadersEntrySize programHeadersCount)
   elfProgramHeader (ELFProgramHeader programFileOffset loadAddress loadAddress programFileSize programFileSize)
   putRoutine program
   where
-    ((programSize, relocationTable), relocatableProgram) = runWriter (execStateT (exitRoutine 4) (0, empty))
+    ((programSize, relocationTable), relocatableProgram) = assembleRoutine mainRoutine
     program = relocate relocatableProgram relocationTable
     elfHeaderSize = 0x40
     programHeadersEntrySize = 0x38
@@ -186,3 +181,13 @@ generate = do
     programFileSize = headerSize + programSize
     loadAddress = 0
     executionEntryAddress = loadAddress + headerSize
+
+exitRoutine :: Word16 -> RoutineWriter ()
+exitRoutine exitCode = do
+  movzx r0 exitCode
+  movzw r8 93
+  svc 0
+
+mainRoutine :: RoutineWriter ()
+mainRoutine = do
+  exitRoutine 42

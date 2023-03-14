@@ -17,6 +17,6 @@ someFunc = do
   inp <- getLine
   print (parse (llex inp))
 
-  B.writeFile "lysse.bin" (runPut generate)
+  B.writeFile "ly" (runPut generate)
 
   return ()

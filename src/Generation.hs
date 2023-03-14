@@ -18,7 +18,7 @@ data ELFHeaderParameter = ELFHeader
     sectionHeadersStringIndex :: Word16
   }
 
-pad :: Word8 -> Word -> PutM ()
+pad :: (Num a, Eq a) => Word8 -> a -> PutM ()
 pad _ 0 = pure ()
 pad v n = do
   pad v (n - 1)
@@ -31,7 +31,7 @@ elfHeader parameters = do
   putWord8 0x02 -- 64 bit
   putWord8 0x01 -- Little endian
   putWord8 0x01 -- Version 1
-  pad 0x00 9
+  pad 0x00 (9 :: Int)
 
   -- e_type
   putWord16le 0x03 -- Executable
@@ -52,7 +52,7 @@ elfHeader parameters = do
   -- e_shoff
   putWord64le (sectionHeadersOffset parameters)
 
-  pad 0x00 4
+  pad 0x00 (4 :: Int)
 
   -- e_ehsize
   putWord16le (elfHeaderSize parameters)
@@ -106,36 +106,6 @@ elfProgramHeader parameters = do
   -- p_align
   putWord64le 0x10_000
 
-{-
-data ELFSectionHeaderParameter = ELFSectionHeader
-  { nameOffset :: Word32,
-    sectionType :: Word32,
-    sectionFlags :: Word64,
-    sectionAddress :: Word64,
-    sectionOffset :: Word64,
-    sectionSize :: Word64
-  }
-
-elfSectionHeader parameters = do
-  -- sh_name
-  putWord32le (nameOffset parameters)
-
-  -- sh_type
-  putWord32le (sectionType parameters)
-
-  -- sh_flags
-  putWord64le (sectionFlags parameters)
-
-  -- sh_addr
-  putWord64le (sectionAddress parameters)
-
-  -- sh_offset
-  putWord64le (sectionOffset parameters)
-
-  -- sh_size
-  putWord64le (sectionSize parameters)
--}
-
 movzw :: Word8 -> Word16 -> Word32
 movzw reg imm = (0x52_80_00_00 :: Word32) .|. shift (fromIntegral imm :: Word32) 5 .|. (fromIntegral reg :: Word32)
 
@@ -154,13 +124,15 @@ generateProgram = do
 generate :: Data.Binary.Put.PutM ()
 generate = do
   elfHeader (ELFHeader executionEntryAddress (fromIntegral elfHeaderSize) 0 elfHeaderSize programHeadersEntrySize programHeadersCount 0 0 0)
-  elfProgramHeader (ELFProgramHeader 0 0 0 programSize programSize)
+  elfProgramHeader (ELFProgramHeader programFileOffset loadAddress loadAddress programSize programSize)
   generateProgram
   where
-    programLength = 12
     elfHeaderSize = 0x40 :: Word16
     programHeadersEntrySize = 0x38
     programHeadersCount = 1
     programHeadersSize = programHeadersEntrySize * programHeadersCount
-    executionEntryAddress = fromIntegral (elfHeaderSize + programHeadersSize)
-    programSize = fromIntegral (elfHeaderSize + programHeadersSize + programLength)
+    headerSize = fromIntegral (elfHeaderSize + programHeadersSize)
+    programFileOffset = 0 -- Offset in file needs to be a multiple of the page size (page size in arm: 4096 bytes)
+    programSize = headerSize + 12
+    loadAddress = 0
+    executionEntryAddress = loadAddress + headerSize

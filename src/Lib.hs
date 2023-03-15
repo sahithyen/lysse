@@ -5,7 +5,7 @@ where
 
 import Data.Binary.Put (runPut)
 import Data.ByteString.Lazy as B (writeFile)
-import Generation (generate)
+import Executable (generate)
 import Lexer (llex)
 import Parser (parse)
 import System.IO (hFlush, stdout)

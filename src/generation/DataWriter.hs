@@ -1,10 +1,13 @@
-module DataWriter (LData (..), DataTable, DataWriter, writeData, lword, offsetPutData) where
+module DataWriter (LData (..), DataTable, DataWriter, writeData, lword, lstring, offsetPutData) where
 
 import Control.Monad.State (StateT, execStateT, gets, modify)
 import Control.Monad.Writer (MonadWriter (tell), Writer, runWriter)
 import Data.Binary (Word32, Word64)
-import Data.Binary.Put (Put, putWord32le)
+import Data.Binary.Put (Put, putLazyByteString, putWord32le)
+import Data.ByteString.Lazy as BS (length)
 import Data.Map (Map, empty, foldrWithKey, insert)
+import Data.Text.Lazy (pack)
+import Data.Text.Lazy.Encoding (encodeUtf8)
 import Relocation (RelocationTable, offsetRelocations)
 
 data LData = LData {dataWriter :: Put, dataLength :: Word64}
@@ -49,6 +52,14 @@ writeDataTable = Data.Map.foldrWithKey writeDataEl (pure ())
 
 lword :: Word32 -> LData
 lword w = LData (putWord32le w) 4
+
+lstring :: String -> LData
+lstring s =
+  LData
+    (putLazyByteString bs)
+    (fromIntegral (BS.length bs))
+  where
+    bs = encodeUtf8 . pack $ s
 
 initialDataState :: DataState
 initialDataState = DataState 0 empty

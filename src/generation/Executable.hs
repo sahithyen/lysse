@@ -1,41 +1,12 @@
-{-# LANGUAGE NumericUnderscores #-}
-
 module Executable (generate, RelocationTable) where
 
-import Data.Binary (Word16, Word32, Word8)
+import Data.Binary (Word16, Word32)
 import Data.Binary.Put (PutM, putWord32le)
-import Data.Bits (shift, (.&.), (.|.))
 import DataWriter (offsetPutData)
 import Elf (ELFHeaderParameter (ELFHeaderParameter), ELFProgramHeaderParameter (ELFProgramHeaderParameter), elfHeader, elfProgramHeader)
+import Instructions (movzw, movzx, movzxLabel, r0, r1, r2, r8, svc)
 import Relocation (RelocationTable, joinRelocationTable, offsetRelocations)
-import RoutineWriter (RoutineWriter, addInstruction, addLabel, addRelocatableInstruction, addUniqueLabel, addWord, assembleRoutine, dataTable, getRelativeAddress, programSize, relocate, relocationTable)
-
-movzw :: Word8 -> Word16 -> RoutineWriter ()
-movzw reg imm = addInstruction $ (0x52_80_00_00 :: Word32) .|. shift (fromIntegral imm :: Word32) 5 .|. (fromIntegral reg :: Word32)
-
-movzx :: Word8 -> Word16 -> RoutineWriter ()
-movzx reg imm = addInstruction $ (0xd2_80_00_00 :: Word32) .|. shift (fromIntegral imm :: Word32) 5 .|. (fromIntegral reg :: Word32)
-
-ldrlx :: String -> RoutineWriter ()
-ldrlx label = do
-  relLabel <- addUniqueLabel
-  addRelocatableInstruction $ \rt ->
-    0x58_00_00_00 .|. (shift (fromIntegral (getRelativeAddress rt label relLabel `div` 4)) 5 .&. 0x00_FF_FF_E0)
-
-svc :: Word16 -> RoutineWriter ()
-svc imm = addInstruction $ (0xd4_00_00_01 :: Word32) .|. shift (fromIntegral imm :: Word32) 5
-
-b :: String -> RoutineWriter ()
-b label = do
-  relLabel <- addUniqueLabel
-  addRelocatableInstruction $ \rt ->
-    0x14_00_00_00 .|. (fromIntegral (getRelativeAddress rt label relLabel `div` 4) .&. 0x03_FF_FF_FF)
-
-r0 :: Word8
-r0 = 0
-
-r8 :: Word8
-r8 = 8
+import RoutineWriter (RoutineWriter, addString, assembleRoutine, dataTable, programSize, relocate, relocationTable)
 
 putRoutine :: [Word32] -> PutM ()
 putRoutine [] = pure ()
@@ -68,15 +39,19 @@ generate = do
 exitRoutine :: Word16 -> RoutineWriter ()
 exitRoutine exitCode = do
   movzx r0 exitCode
-  ldrlx "mol"
   movzw r8 93
+  svc 0
+
+printRoutine :: String -> RoutineWriter ()
+printRoutine textLabel = do
+  movzx r0 0
+  movzxLabel r1 textLabel
+  movzx r2 14
+  movzx r8 64 -- 4 - write syscall
   svc 0
 
 mainRoutine :: RoutineWriter ()
 mainRoutine = do
-  addWord "mol" 42
-  b "case2"
-  addLabel "case1"
-  exitRoutine 21
-  addLabel "case2"
-  exitRoutine 84
+  addString "hello" "hello, world!\n"
+  printRoutine "hello"
+  exitRoutine 0

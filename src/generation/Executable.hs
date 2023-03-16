@@ -52,6 +52,11 @@ printRoutine str = do
   movzx r8 64
   svc 0
 
+-- rdivRoutine :: RoutineWriter ()
+-- rdivRoutine = do
+--   sdiv r2 r0 r1
+--   msub r3 r2 r1 r0
+
 mainRoutine :: RoutineWriter ()
 mainRoutine = do
   printRoutine "hello, macbook\n"

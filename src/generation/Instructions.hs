@@ -7,11 +7,11 @@ import Data.Bits (shift, (.&.), (.|.))
 import Relocation (RelocationTable)
 import RoutineWriter (RoutineWriter, addInstruction, addRelocatableInstruction, addUniqueLabel, getLabel, getRelativeAddress)
 
-getRelative :: RelocationTable -> String -> String -> Word32
-getRelative rt label relLabel = fromIntegral (getRelativeAddress rt label relLabel)
+getByteRelative :: RelocationTable -> String -> String -> Word32
+getByteRelative rt label relLabel = fromIntegral (getRelativeAddress rt label relLabel)
 
-getRelativeForBranch :: RelocationTable -> String -> String -> Word32
-getRelativeForBranch rt label relLabel = getRelative rt label relLabel `div` 4
+getWordRelative :: RelocationTable -> String -> String -> Word32
+getWordRelative rt label relLabel = getByteRelative rt label relLabel `div` 4
 
 movzw :: Word8 -> Word16 -> RoutineWriter ()
 movzw reg imm = addInstruction $ (0x52_80_00_00 :: Word32) .|. shift (fromIntegral imm :: Word32) 5 .|. (fromIntegral reg :: Word32)
@@ -26,13 +26,13 @@ ldrlx :: Word8 -> String -> RoutineWriter ()
 ldrlx reg label = do
   relLabel <- addUniqueLabel
   addRelocatableInstruction $ \rt ->
-    0x58_00_00_00 .|. (shift (getRelativeForBranch rt label relLabel) 5 .&. 0x00_FF_FF_E0) .|. (fromIntegral reg :: Word32)
+    0x58_00_00_00 .|. (shift (getWordRelative rt label relLabel) 5 .&. 0x00_FF_FF_E0) .|. (fromIntegral reg :: Word32)
 
 adr :: Word8 -> String -> RoutineWriter ()
 adr reg label = do
   relLabel <- addUniqueLabel
   addRelocatableInstruction $ \rt ->
-    (shift (getRelative rt label relLabel) 29 .&. 0x60_00_00_00) .|. 0x10_00_00_00 .|. (shift (getRelative rt label relLabel) 3 .&. 0x00_FF_FF_E0) .|. (fromIntegral reg :: Word32)
+    (shift (getByteRelative rt label relLabel) 29 .&. 0x60_00_00_00) .|. 0x10_00_00_00 .|. (shift (getByteRelative rt label relLabel) 3 .&. 0x00_FF_FF_E0) .|. (fromIntegral reg :: Word32)
 
 svc :: Word16 -> RoutineWriter ()
 svc imm = addInstruction $ (0xd4_00_00_01 :: Word32) .|. shift (fromIntegral imm :: Word32) 5
@@ -41,7 +41,7 @@ b :: String -> RoutineWriter ()
 b label = do
   relLabel <- addUniqueLabel
   addRelocatableInstruction $ \rt ->
-    0x14_00_00_00 .|. (getRelativeForBranch rt label relLabel .&. 0x03_FF_FF_FF)
+    0x14_00_00_00 .|. (getWordRelative rt label relLabel .&. 0x03_FF_FF_FF)
 
 r0 :: Word8
 r0 = 0

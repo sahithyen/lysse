@@ -4,10 +4,8 @@ import Control.Monad.State (StateT, execStateT, gets, modify)
 import Control.Monad.Writer (MonadWriter (tell), Writer, runWriter)
 import Data.Binary (Word32, Word64)
 import Data.Binary.Put (Put, putLazyByteString, putWord32le, putWord64le)
-import Data.ByteString.Lazy as BS (length)
+import Data.ByteString.Lazy as BS (ByteString, length)
 import Data.Map (Map, empty, foldrWithKey, insert)
-import Data.Text.Lazy (pack)
-import Data.Text.Lazy.Encoding (encodeUtf8)
 import Relocation (RelocationTable, offsetRelocations)
 
 data LData = LData {dataWriter :: Put, dataLength :: Word64}
@@ -56,13 +54,11 @@ lword w = LData (putWord32le w) 4
 ldword :: Word64 -> LData
 ldword dw = LData (putWord64le dw) 8
 
-lstring :: String -> LData
-lstring s =
+lstring :: ByteString -> LData
+lstring bs =
   LData
     (putLazyByteString bs)
     (fromIntegral (BS.length bs))
-  where
-    bs = encodeUtf8 . pack $ s
 
 initialDataState :: DataState
 initialDataState = DataState 0 empty

@@ -45,14 +45,14 @@ exitRoutine exitCode = do
 
 printRoutine :: String -> RoutineWriter ()
 printRoutine str = do
+  (lab, len) <- addString str
   movzx r0 1
-  adr r1 str
-  movzx r2 13
+  adr r1 lab
+  movzx r2 (fromIntegral len)
   movzx r8 64
   svc 0
 
 mainRoutine :: RoutineWriter ()
 mainRoutine = do
-  addString "hello" "hello, world\n"
-  printRoutine "hello"
+  printRoutine "hello, macbook\n"
   exitRoutine 0

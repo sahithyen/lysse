@@ -8,7 +8,10 @@ import Control.Monad.Writer.Lazy
     runWriter,
   )
 import Data.Binary (Word32, Word64)
+import Data.ByteString.Lazy as BS (length)
 import Data.Map (empty, insert, lookup)
+import Data.Text.Lazy (pack)
+import Data.Text.Lazy.Encoding (encodeUtf8)
 import DataWriter (DataTable, LData, ldword, lstring, lword)
 import Relocation (RelocationTable)
 
@@ -50,8 +53,13 @@ addLabel label = do
 
 addUniqueLabel :: RoutineWriter String
 addUniqueLabel = do
+  l <- getUniqueLabel
+  addLabel l
+  return l
+
+getUniqueLabel :: RoutineWriter String
+getUniqueLabel = do
   cl <- gets programSize
-  addLabel $ "tmp_" ++ show cl
   return $ "tmp_" ++ show cl
 
 addLData :: String -> LData -> RoutineWriter ()
@@ -65,8 +73,14 @@ addWord l w = addLData l (lword w)
 addDWord :: String -> Word64 -> RoutineWriter ()
 addDWord l dw = addLData l (ldword dw)
 
-addString :: String -> String -> RoutineWriter ()
-addString l s = addLData l (lstring s)
+addString :: String -> RoutineWriter (String, Word64)
+addString s = do
+  l <- getUniqueLabel
+  addLData l (lstring bs)
+  return (l, bsl)
+  where
+    bs = encodeUtf8 . pack $ s
+    bsl = fromIntegral $ BS.length bs
 
 getLabel :: RelocationTable -> String -> Word64
 getLabel rt l = case Data.Map.lookup l rt of

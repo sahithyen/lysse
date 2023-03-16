@@ -1,4 +1,4 @@
-module RoutineWriter (RoutineWriter, addLabel, getLabel, addInstruction, addUniqueLabel, addRelocatableInstruction, assembleRoutine, relocationTable, relocate, programSize, addWord, getRelativeAddress, dataTable, addString) where
+module RoutineWriter (RoutineWriter, addLabel, getLabel, addInstruction, addUniqueLabel, addRelocatableInstruction, assembleRoutine, relocationTable, relocate, programSize, addWord, addDWord, getRelativeAddress, dataTable, addString) where
 
 import Control.Monad.State (execStateT, gets, modify)
 import Control.Monad.State.Lazy (StateT)
@@ -9,7 +9,7 @@ import Control.Monad.Writer.Lazy
   )
 import Data.Binary (Word32, Word64)
 import Data.Map (empty, insert, lookup)
-import DataWriter (DataTable, LData, lstring, lword)
+import DataWriter (DataTable, LData, ldword, lstring, lword)
 import Relocation (RelocationTable)
 
 type RelocatableInstruction = RelocationTable -> Word32
@@ -61,6 +61,9 @@ addLData l d = do
 
 addWord :: String -> Word32 -> RoutineWriter ()
 addWord l w = addLData l (lword w)
+
+addDWord :: String -> Word64 -> RoutineWriter ()
+addDWord l dw = addLData l (ldword dw)
 
 addString :: String -> String -> RoutineWriter ()
 addString l s = addLData l (lstring s)

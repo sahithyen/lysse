@@ -1,9 +1,9 @@
-module DataWriter (LData (..), DataTable, DataWriter, writeData, lword, lstring, offsetPutData) where
+module DataWriter (LData (..), DataTable, DataWriter, writeData, lword, ldword, lstring, offsetPutData) where
 
 import Control.Monad.State (StateT, execStateT, gets, modify)
 import Control.Monad.Writer (MonadWriter (tell), Writer, runWriter)
 import Data.Binary (Word32, Word64)
-import Data.Binary.Put (Put, putLazyByteString, putWord32le)
+import Data.Binary.Put (Put, putLazyByteString, putWord32le, putWord64le)
 import Data.ByteString.Lazy as BS (length)
 import Data.Map (Map, empty, foldrWithKey, insert)
 import Data.Text.Lazy (pack)
@@ -53,6 +53,9 @@ writeDataTable = Data.Map.foldrWithKey writeDataEl (pure ())
 lword :: Word32 -> LData
 lword w = LData (putWord32le w) 4
 
+ldword :: Word64 -> LData
+ldword dw = LData (putWord64le dw) 8
+
 lstring :: String -> LData
 lstring s =
   LData
@@ -73,8 +76,8 @@ putAll (p : ps) = do
   p
   putAll ps
 
-offsetPutData :: Word64 -> DataTable -> (Put, RelocationTable)
-offsetPutData offset dt = (w, offRt)
+offsetPutData :: Word64 -> DataTable -> (Put, RelocationTable, Word64)
+offsetPutData offset dt = (w, offRt, dataSize s)
   where
     (s, ps) = execute dt
     w = putAll ps

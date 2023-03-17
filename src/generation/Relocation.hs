@@ -1,10 +1,11 @@
-module Relocation (RelocationTable, offsetRelocations, joinRelocationTables, RelocatableWriter, Relocatable (..), addRelocatable, executeRelocatableWriter) where
+module Relocation (RelocationTable, offsetRelocations, joinRelocationTables, RelocatableWriter, Relocatable (..), addRelocatable, executeRelocatableWriter, newRelocatableUnit, addLabel, resolveLabel) where
 
 import Control.Exception (assert)
 import Control.Monad.State (State, execState, gets, modify)
 import Data.Binary (Put, Word64, Word8, putWord8)
 import Data.List (sortOn)
-import Data.Map (Map, empty, insert, lookup, mapAccum, union)
+import Data.Map (Map, empty, insert, lookup, mapAccum, notMember, singleton, union)
+import Data.Ord (Down (Down))
 
 -- Relocation table
 type RelocationTable = Map String Word64
@@ -14,6 +15,11 @@ offsetRelocations a = fmap (+ a)
 
 joinRelocationTables :: RelocationTable -> RelocationTable -> RelocationTable
 joinRelocationTables = union
+
+resolveLabel :: RelocationTable -> String -> Word64
+resolveLabel rt l = case Data.Map.lookup l rt of
+  Just addr -> addr
+  Nothing -> error ("Label '" ++ l ++ "'" ++ " not found")
 
 -- Relocatable
 data Relocatable = Relocatable {relocatableData :: RelocationTable -> Put, reloctableSize :: Word64, relocatableAlignment :: Word64}
@@ -71,17 +77,31 @@ joinUnits = joinAlignedUnits 1
 joinUnitList :: [RelocatableUnit] -> RelocatableUnit
 joinUnitList us = foldr joinUnits emptyRelocatableUnit sus
   where
-    sus = sortOn (\(RelocatableUnit (Relocatable _ s _) _) -> s) us
+    sus = sortOn (Down . (\(RelocatableUnit (Relocatable _ s _) _) -> s)) us
 
 relocatableUnitSize :: RelocatableUnit -> Word64
 relocatableUnitSize (RelocatableUnit rel _) = reloctableSize rel
 
+addLabelToRelocatableUnit :: String -> RelocatableUnit -> RelocatableUnit
+addLabelToRelocatableUnit l u = RelocatableUnit rel newRt
+  where
+    RelocatableUnit rel rt = u
+    addr = reloctableSize rel
+    newRt = assert (notMember l rt) $ insert l addr rt
+
 -- Segment
 newtype Segment = Segment [RelocatableUnit]
+
+addLabelToSegment :: String -> Segment -> Segment
+addLabelToSegment l (Segment []) = Segment [RelocatableUnit emptyRelocatable (singleton l 0)]
+addLabelToSegment l (Segment (u : us)) = Segment (addLabelToRelocatableUnit l u : us)
 
 addRelocatableToSegment :: Relocatable -> Segment -> Segment
 addRelocatableToSegment rel (Segment []) = Segment [RelocatableUnit rel empty]
 addRelocatableToSegment rel (Segment (u : us)) = Segment (addRelocatableToUnit u rel : us)
+
+addUnitToSegment :: Segment -> Segment
+addUnitToSegment (Segment us) = Segment (emptyRelocatableUnit : us)
 
 newtype RelocatableWriterState = State {segments :: Map String Segment}
 
@@ -100,9 +120,9 @@ type RelocatableWriter = State RelocatableWriterState
 
 modifySegment :: String -> (Segment -> Segment) -> RelocatableWriter ()
 modifySegment sname fn = do
-  segments <- gets segments
+  segmentsMap <- gets segments
 
-  segment <- case Data.Map.lookup sname segments of
+  segment <- case Data.Map.lookup sname segmentsMap of
     Just segment -> do
       return (fn segment)
     Nothing -> do
@@ -111,9 +131,19 @@ modifySegment sname fn = do
   modify (setSegment sname segment)
   return ()
 
+addLabel :: String -> String -> RelocatableWriter ()
+addLabel sname l = do
+  modifySegment sname $ addLabelToSegment l
+  return ()
+
 addRelocatable :: String -> Relocatable -> RelocatableWriter ()
 addRelocatable sname rel = do
   modifySegment sname $ addRelocatableToSegment rel
+  return ()
+
+newRelocatableUnit :: String -> RelocatableWriter ()
+newRelocatableUnit sname = do
+  modifySegment sname addUnitToSegment
   return ()
 
 type SegmentTable = Map String Word64

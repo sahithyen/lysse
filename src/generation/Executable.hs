@@ -4,9 +4,9 @@ import Data.Binary (Word16, Word32)
 import Data.Binary.Put (PutM, putWord32le)
 import DataWriter (offsetPutData)
 import Elf (ELFHeaderParameter (ELFHeaderParameter), ELFProgramHeaderParameter (ELFProgramHeaderParameter), elfHeader, elfProgramHeader)
-import Instructions (adr, movzw, movzx, r0, r1, r2, r8, svc)
+import Instructions (adr, ldrlx, mov, movzw, movzx, msub, r0, r1, r2, r3, r8, sdiv, stri, svc)
 import Relocation (RelocationTable, joinRelocationTable, offsetRelocations)
-import RoutineWriter (RoutineWriter, addString, assembleRoutine, dataTable, programSize, relocate, relocationTable)
+import RoutineWriter (RoutineWriter, addDWord, addString, assembleRoutine, dataTable, programSize, relocate, relocationTable)
 
 putRoutine :: [Word32] -> PutM ()
 putRoutine [] = pure ()
@@ -37,9 +37,9 @@ generate = do
     loadAddress = 0
     executionEntryAddress = loadAddress + headerSize
 
-exitRoutine :: Word16 -> RoutineWriter ()
-exitRoutine exitCode = do
-  movzx r0 exitCode
+-- r0 exit code
+exitRoutine :: RoutineWriter ()
+exitRoutine = do
   movzw r8 93
   svc 0
 
@@ -52,12 +52,29 @@ printRoutine str = do
   movzx r8 64
   svc 0
 
--- rdivRoutine :: RoutineWriter ()
--- rdivRoutine = do
---   sdiv r2 r0 r1
---   msub r3 r2 r1 r0
+-- r0 dividend
+-- r1 divisor
+-- r2 quotient
+-- r3 remainder
+rdivRoutine :: RoutineWriter ()
+rdivRoutine = do
+  sdiv r2 r0 r1
+  msub r3 r2 r1 r0
 
 mainRoutine :: RoutineWriter ()
 mainRoutine = do
-  printRoutine "hello, macbook\n"
-  exitRoutine 0
+  addDWord "buf" 200
+
+  -- Calculate 20 / 8
+  movzx r0 20
+  movzx r1 7
+  rdivRoutine
+  mov r0 r3
+  -- 6
+
+  adr r1 "buf"
+  -- stri r3 r1 0
+
+  ldrlx r0 "buf"
+
+  exitRoutine

@@ -1,6 +1,6 @@
 {-# LANGUAGE NumericUnderscores #-}
 
-module Instructions (add, sdiv, msub, movzw, movzx, mov, ldrlx, svc, adr, b, r0, r1, r2, r3, r8) where
+module Instructions (add, sdiv, msub, movzw, movzx, mov, ldrlx, stri, svc, adr, b, r0, r1, r2, r3, r8) where
 
 import Data.Binary (Word16, Word32)
 import Data.Bits (shift, (.&.), (.|.))
@@ -33,6 +33,9 @@ adr reg label = do
   relLabel <- addUniqueLabel
   addRelocatableInstruction $ \rt ->
     (shift (getByteRelative rt label relLabel) 29 .&. 0x60_00_00_00) .|. 0x10_00_00_00 .|. (shift (getByteRelative rt label relLabel) 3 .&. 0x00_FF_FF_E0) .|. reg
+
+stri :: Word32 -> Word32 -> Word32 -> RoutineWriter ()
+stri t n imm = addInstruction $ 0xf9_00_00_00 .|. shift imm 12 .|. shift n 5 .|. t
 
 svc :: Word16 -> RoutineWriter ()
 svc imm = addInstruction $ (0xd4_00_00_01 :: Word32) .|. shift (fromIntegral imm :: Word32) 5

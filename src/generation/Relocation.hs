@@ -1,4 +1,4 @@
-module Relocation (RelocationTable, offsetRelocations, joinRelocationTables, RelocatableWriter, Relocatable (..), addRelocatable, addLabeledRelocatable, executeRelocatableWriter, newRelocatableUnit, addLabel, addUniqueLabel, resolveLabel, getRelativeAddress, SegmentType (..), addSegment) where
+module Relocation (RelocationTable, offsetRelocations, joinRelocationTables, RelocatableWriter, Relocatable (..), addRelocatable, getUniqueLabel, addLabeledRelocatable, executeRelocatableWriter, newRelocatableUnit, addLabel, addUniqueLabel, resolveLabel, getRelativeAddress, SegmentType (..), addSegment) where
 
 import Control.Exception (assert)
 import Control.Monad.State (State, execState, gets, modify)
@@ -168,12 +168,17 @@ addLabel sname l = do
   modifySegment sname $ addLabelToSegment l
   return ()
 
-addUniqueLabel :: String -> RelocatableWriter String
-addUniqueLabel sname = do
+getUniqueLabel :: RelocatableWriter String
+getUniqueLabel = do
   c <- gets counter
   let l = "@" ++ show c ++ "@"
-  addLabel sname l
   modify incrementCounter
+  return l
+
+addUniqueLabel :: String -> RelocatableWriter String
+addUniqueLabel sname = do
+  l <- getUniqueLabel
+  addLabel sname l
   return l
 
 addRelocatable :: String -> Relocatable -> RelocatableWriter ()

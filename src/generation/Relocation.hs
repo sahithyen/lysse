@@ -1,10 +1,10 @@
-module Relocation (RelocationTable, offsetRelocations, joinRelocationTables, RelocatableWriter, Relocatable (..), addRelocatable, executeRelocatableWriter, newRelocatableUnit, addLabel, resolveLabel) where
+module Relocation (RelocationTable, offsetRelocations, joinRelocationTables, RelocatableWriter, Relocatable (..), addRelocatable, addLabeledRelocatable, executeRelocatableWriter, newRelocatableUnit, addLabel, addUniqueLabel, resolveLabel, getRelativeAddress, SegmentType (..), addSegment) where
 
 import Control.Exception (assert)
 import Control.Monad.State (State, execState, gets, modify)
 import Data.Binary (Put, Word64, Word8, putWord8)
-import Data.List (sortOn)
-import Data.Map (Map, empty, insert, lookup, mapAccum, notMember, singleton, union)
+import Data.List (mapAccumL, sortOn)
+import Data.Map (Map, empty, findWithDefault, fromList, insert, intersection, lookup, notMember, singleton, union)
 import Data.Ord (Down (Down))
 
 -- Relocation table
@@ -14,12 +14,15 @@ offsetRelocations :: Word64 -> RelocationTable -> RelocationTable
 offsetRelocations a = fmap (+ a)
 
 joinRelocationTables :: RelocationTable -> RelocationTable -> RelocationTable
-joinRelocationTables = union
+joinRelocationTables a b = if intersection a b == empty then a `union` b else error "Duplicate labels found..."
 
 resolveLabel :: RelocationTable -> String -> Word64
 resolveLabel rt l = case Data.Map.lookup l rt of
   Just addr -> addr
   Nothing -> error ("Label '" ++ l ++ "'" ++ " not found")
+
+getRelativeAddress :: RelocationTable -> String -> String -> Word64
+getRelativeAddress rt dest_label from_label = resolveLabel rt dest_label - resolveLabel rt from_label
 
 -- Relocatable
 data Relocatable = Relocatable {relocatableData :: RelocationTable -> Put, reloctableSize :: Word64, relocatableAlignment :: Word64}
@@ -37,9 +40,9 @@ pad v n = do
   putWord8 v
 
 joinRelocatableAligned :: Word64 -> Relocatable -> Relocatable -> (Relocatable, Word64)
-joinRelocatableAligned na (Relocatable ad as aa) (Relocatable bd bs ba) = (crel, off)
+joinRelocatableAligned alignment (Relocatable ad as aa) (Relocatable bd bs ba) = (crel, off)
   where
-    bfa = lcm na ba
+    bfa = lcm alignment ba
     off = if as `mod` bfa == 0 then 0 else bfa - (as `mod` bfa)
     cd rt = do
       ad rt
@@ -60,11 +63,27 @@ data RelocatableUnit = RelocatableUnit Relocatable RelocationTable
 emptyRelocatableUnit :: RelocatableUnit
 emptyRelocatableUnit = RelocatableUnit emptyRelocatable empty
 
-addRelocatableToUnit :: RelocatableUnit -> Relocatable -> RelocatableUnit
-addRelocatableToUnit (RelocatableUnit rela rt) relb = RelocatableUnit (fst $ joinRelocatable rela relb) rt
+fillerRelocatableUnit :: Word64 -> RelocatableUnit
+fillerRelocatableUnit size = RelocatableUnit (Relocatable (const $ pure ()) size 1) empty
 
-joinAlignedUnits :: Word64 -> RelocatableUnit -> RelocatableUnit -> RelocatableUnit
-joinAlignedUnits alignment (RelocatableUnit ar art) (RelocatableUnit br brt) = RelocatableUnit cr crt
+addLabelToRelocatableUnit :: String -> RelocatableUnit -> RelocatableUnit
+addLabelToRelocatableUnit l u = RelocatableUnit rel newRt
+  where
+    RelocatableUnit rel rt = u
+    addr = reloctableSize rel
+    newRt = if notMember l rt then insert l addr rt else error ("Label '" ++ l ++ "'" ++ " already exists")
+
+addRelocatableToUnit :: Maybe String -> RelocatableUnit -> Relocatable -> RelocatableUnit
+addRelocatableToUnit ml (RelocatableUnit rela rt) relb = RelocatableUnit relc newRt
+  where
+    (relc, off) = joinRelocatable rela relb
+    addr = reloctableSize rela + off
+    newRt = case ml of
+      Just l -> if notMember l rt then insert l addr rt else error ("Label '" ++ l ++ "'" ++ " already exists")
+      Nothing -> rt
+
+joinAlignedUnits :: Word64 -> RelocatableUnit -> RelocatableUnit -> (RelocatableUnit, Word64)
+joinAlignedUnits alignment (RelocatableUnit ar art) (RelocatableUnit br brt) = (RelocatableUnit cr crt, boff)
   where
     as = reloctableSize ar
     (cr, off) = joinRelocatableAligned alignment ar br
@@ -72,7 +91,7 @@ joinAlignedUnits alignment (RelocatableUnit ar art) (RelocatableUnit br brt) = R
     crt = joinRelocationTables art (offsetRelocations boff brt)
 
 joinUnits :: RelocatableUnit -> RelocatableUnit -> RelocatableUnit
-joinUnits = joinAlignedUnits 1
+joinUnits a b = fst $ joinAlignedUnits 1 a b
 
 joinUnitList :: [RelocatableUnit] -> RelocatableUnit
 joinUnitList us = foldr joinUnits emptyRelocatableUnit sus
@@ -82,28 +101,34 @@ joinUnitList us = foldr joinUnits emptyRelocatableUnit sus
 relocatableUnitSize :: RelocatableUnit -> Word64
 relocatableUnitSize (RelocatableUnit rel _) = reloctableSize rel
 
-addLabelToRelocatableUnit :: String -> RelocatableUnit -> RelocatableUnit
-addLabelToRelocatableUnit l u = RelocatableUnit rel newRt
-  where
-    RelocatableUnit rel rt = u
-    addr = reloctableSize rel
-    newRt = assert (notMember l rt) $ insert l addr rt
-
 -- Segment
-newtype Segment = Segment [RelocatableUnit]
+data SegmentType = Exec | ROData | Data
+
+data Segment = Segment [RelocatableUnit] Word64 SegmentType
+
+createSegment :: Word64 -> Word64 -> SegmentType -> Segment
+createSegment offset = Segment [fillerRelocatableUnit offset]
 
 addLabelToSegment :: String -> Segment -> Segment
-addLabelToSegment l (Segment []) = Segment [RelocatableUnit emptyRelocatable (singleton l 0)]
-addLabelToSegment l (Segment (u : us)) = Segment (addLabelToRelocatableUnit l u : us)
+addLabelToSegment l (Segment [] a t) = Segment [RelocatableUnit emptyRelocatable (singleton l 0)] a t
+addLabelToSegment l (Segment (u : us) a t) = Segment (addLabelToRelocatableUnit l u : us) a t
 
-addRelocatableToSegment :: Relocatable -> Segment -> Segment
-addRelocatableToSegment rel (Segment []) = Segment [RelocatableUnit rel empty]
-addRelocatableToSegment rel (Segment (u : us)) = Segment (addRelocatableToUnit u rel : us)
+addRelocatableToSegment :: Maybe String -> Relocatable -> Segment -> Segment
+addRelocatableToSegment ml rel (Segment [] a t) = Segment [addRelocatableToUnit ml emptyRelocatableUnit rel] a t
+addRelocatableToSegment ml rel (Segment (u : us) a t) = Segment (addRelocatableToUnit ml u rel : us) a t
 
 addUnitToSegment :: Segment -> Segment
-addUnitToSegment (Segment us) = Segment (emptyRelocatableUnit : us)
+addUnitToSegment (Segment us a t) = Segment (emptyRelocatableUnit : us) a t
 
-newtype RelocatableWriterState = State {segments :: Map String Segment}
+data RelocatableWriterState = State {segments :: Map String Segment, segmentOrder :: [String], counter :: Word64}
+
+incrementCounter :: RelocatableWriterState -> RelocatableWriterState
+incrementCounter state = state {counter = nc}
+  where
+    nc = counter state + 1
+
+addSegmentOrder :: String -> RelocatableWriterState -> RelocatableWriterState
+addSegmentOrder sname state = state {segmentOrder = segmentOrder state ++ [sname]}
 
 setSegment :: String -> Segment -> RelocatableWriterState -> RelocatableWriterState
 setSegment sname segment state = state {segments = insert sname segment ss}
@@ -111,12 +136,19 @@ setSegment sname segment state = state {segments = insert sname segment ss}
     ss = segments state
 
 initialRelocatableWriterState :: RelocatableWriterState
-initialRelocatableWriterState = State empty
-
-joinSegmentUnits :: Segment -> RelocatableUnit
-joinSegmentUnits (Segment us) = joinUnitList us
+initialRelocatableWriterState = State empty [] 0
 
 type RelocatableWriter = State RelocatableWriterState
+
+addSegment :: String -> Word64 -> Word64 -> SegmentType -> RelocatableWriter ()
+addSegment sname soff sal st = do
+  segmentsMap <- gets segments
+  case Data.Map.lookup sname segmentsMap of
+    Just _ -> error ("Segment '" ++ sname ++ "' already existing.")
+    Nothing -> do
+      modify $ setSegment sname $ createSegment soff sal st
+      modify $ addSegmentOrder sname
+  return ()
 
 modifySegment :: String -> (Segment -> Segment) -> RelocatableWriter ()
 modifySegment sname fn = do
@@ -126,7 +158,7 @@ modifySegment sname fn = do
     Just segment -> do
       return (fn segment)
     Nothing -> do
-      return (fn (Segment []))
+      error ("Segment '" ++ sname ++ "' not existing.")
 
   modify (setSegment sname segment)
   return ()
@@ -136,9 +168,22 @@ addLabel sname l = do
   modifySegment sname $ addLabelToSegment l
   return ()
 
+addUniqueLabel :: String -> RelocatableWriter String
+addUniqueLabel sname = do
+  c <- gets counter
+  let l = "@" ++ show c ++ "@"
+  addLabel sname l
+  modify incrementCounter
+  return l
+
 addRelocatable :: String -> Relocatable -> RelocatableWriter ()
 addRelocatable sname rel = do
-  modifySegment sname $ addRelocatableToSegment rel
+  modifySegment sname $ addRelocatableToSegment Nothing rel
+  return ()
+
+addLabeledRelocatable :: String -> String -> Relocatable -> RelocatableWriter ()
+addLabeledRelocatable sname l rel = do
+  modifySegment sname $ addRelocatableToSegment (Just l) rel
   return ()
 
 newRelocatableUnit :: String -> RelocatableWriter ()
@@ -146,21 +191,21 @@ newRelocatableUnit sname = do
   modifySegment sname addUnitToSegment
   return ()
 
-type SegmentTable = Map String Word64
+type SegmentTable = Map String (Word64, Word64, SegmentType)
 
-assembleNamedUnits :: Word64 -> Map String RelocatableUnit -> (RelocatableUnit, SegmentTable)
-assembleNamedUnits alignment =
-  mapAccum
-    ( \acc u ->
-        ( joinAlignedUnits alignment acc u,
-          relocatableUnitSize acc
-        )
-    )
-    emptyRelocatableUnit
+joinSegments :: Map String Segment -> RelocatableUnit -> String -> (RelocatableUnit, (String, (Word64, Word64, SegmentType)))
+joinSegments segmentsMap acc sname = (ju, (sname, (ss, boff, st)))
+  where
+    Segment sus sal st = findWithDefault (error "Order list and map of segements out of sync") sname segmentsMap
+    su = joinUnitList sus
+    ss = relocatableUnitSize su
+    (ju, boff) = joinAlignedUnits sal acc su
+
+assembleSegments :: Map String Segment -> [String] -> (RelocatableUnit, [(String, (Word64, Word64, SegmentType))])
+assembleSegments segmentsMap = mapAccumL (joinSegments segmentsMap) emptyRelocatableUnit
 
 executeRelocatableWriter :: RelocatableWriter () -> (RelocationTable -> Put, RelocationTable, SegmentTable)
-executeRelocatableWriter fn = (putRelocatable rel, rt, st)
+executeRelocatableWriter fn = (putRelocatable rel, rt, fromList st)
   where
-    (State segmentsMap) = execState fn initialRelocatableWriterState
-    namedUnits = fmap joinSegmentUnits segmentsMap
-    (RelocatableUnit rel rt, st) = assembleNamedUnits 4096 namedUnits
+    (State segmentsMap order _) = execState fn initialRelocatableWriterState
+    (RelocatableUnit rel rt, st) = assembleSegments segmentsMap order

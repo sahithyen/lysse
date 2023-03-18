@@ -28,12 +28,10 @@ library
       Lexer
       Lib
       Parser
-      DataWriter
       Elf
       Executable
       Instructions
       Relocation
-      RoutineWriter
   other-modules:
       Paths_lysse
   hs-source-dirs:

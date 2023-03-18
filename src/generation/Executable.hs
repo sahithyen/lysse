@@ -1,8 +1,9 @@
 module Executable (generate, RelocationTable) where
 
-import Data.Binary (Word32, Word8, putWord8)
+import Data.Binary (Word32, Word64, Word8, putWord8)
 import Data.Binary.Put (PutM, putWord32le, putWord64le)
-import Relocation (Relocatable (..), RelocatableWriter, RelocationTable, addLabel, addRelocatable, executeRelocatableWriter, newRelocatableUnit, offsetRelocations, resolveLabel)
+import Elf (ELFHeaderParameter (ELFHeaderParameter), ELFProgramHeaderParameter (ELFProgramHeaderParameter), elfHeader, elfProgramHeader)
+import Relocation (Relocatable (..), RelocatableWriter, RelocationTable, SegmentType (Data, Exec), addLabel, addLabeledRelocatable, addRelocatable, addSegment, executeRelocatableWriter, offsetRelocations, resolveLabel)
 
 addWord :: Word32 -> Relocatable
 addWord v = Relocatable (const $ putWord32le v) 4 4
@@ -15,26 +16,28 @@ writeLabel l = Relocatable (\rt -> putWord64le (resolveLabel rt l)) 8 8
 
 routine :: RelocatableWriter ()
 routine = do
-  addRelocatable "code" (addByte 10)
-  addRelocatable "code" (addWord 20)
-  addRelocatable "code" (addByte 10)
-  addRelocatable "code" (addByte 0xff)
-  addRelocatable "code" (addByte 0xfe)
-  addRelocatable "code" (addByte 0xfd)
-  addRelocatable "code" (addByte 0xfc)
+  addLabel "code" "_start"
+  addRelocatable "code" (addWord 0xfffefdfc)
 
-  addRelocatable "code" (addWord 20)
+  addLabel "data" "s"
+  addLabeledRelocatable "data" "d" $ addWord 0xcafecafe
 
-  addRelocatable "data" (addByte 0xff)
-  newRelocatableUnit "data"
-  addLabel "data" "some"
-  addRelocatable "data" (addWord 0xcafecafe)
-
-  addRelocatable "test" (writeLabel "some")
+defineSegments :: Word64 -> Word64 -> [(String, SegmentType)] -> RelocatableWriter ()
+defineSegments _ _ [] = pure ()
+defineSegments o a ((sname, st) : ss) = do
+  addSegment sname o a st
+  defineSegments 0 a ss
 
 generate :: Data.Binary.Put.PutM ()
 generate = do
-  putCode newRt
+  elfHeader $ ELFHeaderParameter executionEntryAddress (fromIntegral programHeadersCount)
+  mapM_ elfProgramHeader programParameters
+  putCode rt
   where
-    (putCode, rt, _) = executeRelocatableWriter routine
-    newRt = offsetRelocations 0 rt
+    segments = [("code", Exec), ("data", Data)]
+    programHeadersCount = fromIntegral $ length segments
+    headerOffset = 0x40 + 0x38 * programHeadersCount
+    segmentAlignment = 4096
+    (putCode, rt, st) = executeRelocatableWriter $ sequence_ [defineSegments headerOffset segmentAlignment segments, routine]
+    programParameters = fmap (\(ssize, soff, stype) -> ELFProgramHeaderParameter soff soff ssize ssize segmentAlignment stype) st
+    executionEntryAddress = resolveLabel rt "_start"

@@ -4,10 +4,10 @@ module Elf (ELFHeaderParameter (..), elfHeader, ELFProgramHeaderParameter (..), 
 
 import Data.Binary (Word16, Word64, Word8)
 import Data.Binary.Put (PutM, putWord16le, putWord32be, putWord32le, putWord64le, putWord8)
+import Relocation (SegmentType (..))
 
 data ELFHeaderParameter = ELFHeaderParameter
   { executionEntryAddress :: Word64,
-    programHeadersEntrySize :: Word16,
     programHeadersCount :: Word16
   }
 
@@ -50,7 +50,7 @@ elfHeader parameters = do
   putWord16le 0x40
 
   -- e_phentsize
-  putWord16le (programHeadersEntrySize parameters)
+  putWord16le 0x38
 
   -- e_phnum
   putWord16le (programHeadersCount parameters)
@@ -66,10 +66,11 @@ elfHeader parameters = do
 
 data ELFProgramHeaderParameter = ELFProgramHeaderParameter
   { offset :: Word64,
-    virtualAddress :: Word64,
-    physicalAddress :: Word64,
+    address :: Word64,
     fileSize :: Word64,
-    memSize :: Word64
+    memSize :: Word64,
+    alignment :: Word64,
+    segmentType :: SegmentType
   }
 
 elfProgramHeader :: ELFProgramHeaderParameter -> PutM ()
@@ -78,22 +79,29 @@ elfProgramHeader parameters = do
   putWord32le 0x01
 
   -- p_flags
-  putWord32le 0x05
+  -- PF_X 0x1
+  -- PF_W 0x2
+  -- PF_R 0x4
+  let perm = case segmentType parameters of
+        ROData -> 0x4
+        Exec -> 0x5
+        Data -> 0x6
+  putWord32le perm
 
   -- p_offset
-  putWord64le (offset parameters)
+  putWord64le $ offset parameters
 
   -- p_vaddr
-  putWord64le (virtualAddress parameters)
+  putWord64le $ address parameters
 
   -- p_paddr
-  putWord64le (physicalAddress parameters)
+  putWord64le $ address parameters
 
   -- p_filesz
-  putWord64le (fileSize parameters)
+  putWord64le $ fileSize parameters
 
   -- p_memsz
-  putWord64le (memSize parameters)
+  putWord64le $ memSize parameters
 
   -- p_align
-  putWord64le 0x10_000
+  putWord64le $ alignment parameters

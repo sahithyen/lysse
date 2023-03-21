@@ -28,6 +28,7 @@ library
       Lexer
       Lib
       Parser
+      STree
       Elf
       Executable
       Instructions

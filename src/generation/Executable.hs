@@ -6,8 +6,44 @@ import Data.ByteString.Lazy as BS (length)
 import Data.Text.Lazy (pack)
 import Data.Text.Lazy.Encoding (encodeUtf8)
 import Elf (ELFHeaderParameter (ELFHeaderParameter), ELFProgramHeaderParameter (ELFProgramHeaderParameter), elfHeader, elfProgramHeader)
-import Instructions (add, addi, adr, bcond, bl, cmp, ldri, ldrlx, lr, madd, mov, movzx, msub, r0, r1, r2, r3, r4, r5, r6, r8, ret, sdiv, sp, stri, stripre, svc, wzr)
-import Relocation (Relocatable (..), RelocatableWriter, RelocationTable, SegmentType (Data, Exec), addLabel, addLabeledRelocatable, addRelocatable, addSegment, executeRelocatableWriter, getUniqueLabel, resolveLabel)
+import Instructions
+  ( addi,
+    adr,
+    bcond,
+    bl,
+    cmp,
+    ldri,
+    lr,
+    madd,
+    mov,
+    movzx,
+    msub,
+    r0,
+    r1,
+    r2,
+    r3,
+    r4,
+    r8,
+    ret,
+    sdiv,
+    sp,
+    stri,
+    stripre,
+    svc,
+    wzr,
+  )
+import Relocation
+  ( Relocatable (Relocatable),
+    RelocatableWriter,
+    RelocationTable,
+    SegmentType (Data, Exec),
+    addLabel,
+    addLabeledRelocatable,
+    addSegment,
+    executeRelocatableWriter,
+    getUniqueLabel,
+    resolveLabel,
+  )
 
 addWord :: Word32 -> Relocatable
 addWord v = Relocatable (const $ putWord32le v) 4 4

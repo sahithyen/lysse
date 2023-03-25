@@ -29,9 +29,11 @@ library
       Lib
       Parser
       STree
+      Data
       Elf
       Executable
       Instructions
+      LyGen
       Relocation
   other-modules:
       Paths_lysse

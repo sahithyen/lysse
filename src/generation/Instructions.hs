@@ -1,6 +1,6 @@
 {-# LANGUAGE NumericUnderscores #-}
 
-module Instructions (cmp, add, addi, sdiv, madd, msub, movzw, movzx, mov, ldrlx, stri, ldri, stripre, svc, adr, lr, b, bl, ret, bcond, r0, r1, r2, r3, r4, r5, r6, r8, wzr, sp) where
+module Instructions (cmp, add, sub, neg, addi, subi, sdiv, madd, msub, lsri, lsli, movzw, movzx, mov, ldrlx, stri, ldri, stripre, svc, adr, lr, b, bl, tbz, ret, bcond, r0, r1, r2, r3, r4, r5, r6, r8, wzr, sp) where
 
 import Data.Binary (Word16, Word32)
 import Data.Binary.Put (putWord32le)
@@ -74,7 +74,13 @@ addi :: Word32 -> Word32 -> Word32 -> RelocatableWriter ()
 addi rd rn imm = addInstruction $ 0x91_00_00_00 .|. shift imm 10 .|. shift rn 5 .|. rd
 
 add :: Word32 -> Word32 -> Word32 -> RelocatableWriter ()
-add ra rb rd = addInstruction $ 0xab_00_00_00 .|. shift ra 16 .|. shift rb 5 .|. rd
+add rd ra rb = addInstruction $ 0xab_00_00_00 .|. shift ra 16 .|. shift rb 5 .|. rd
+
+subi :: Word32 -> Word32 -> Word32 -> RelocatableWriter ()
+subi rd rn imm = addInstruction $ 0xd1_00_00_00 .|. shift imm 10 .|. shift rn 5 .|. rd
+
+sub :: Word32 -> Word32 -> Word32 -> RelocatableWriter ()
+sub rd rb ra = addInstruction $ 0xcb_00_00_00 .|. shift ra 16 .|. shift rb 5 .|. rd
 
 sdiv :: Word32 -> Word32 -> Word32 -> RelocatableWriter ()
 sdiv d n m = addInstruction $ 0x9a_c0_0c_00 .|. shift m 16 .|. shift n 5 .|. d
@@ -82,17 +88,33 @@ sdiv d n m = addInstruction $ 0x9a_c0_0c_00 .|. shift m 16 .|. shift n 5 .|. d
 msub :: Word32 -> Word32 -> Word32 -> Word32 -> RelocatableWriter ()
 msub d n m a = addInstruction $ 0x9b_00_80_00 .|. shift m 16 .|. shift a 10 .|. shift n 5 .|. d
 
+neg :: Word32 -> Word32 -> RelocatableWriter ()
+neg d m = addInstruction $ 0xcb_00_03_e0 .|. shift m 16 .|. d
+
 madd :: Word32 -> Word32 -> Word32 -> Word32 -> RelocatableWriter ()
 madd d n m a = addInstruction $ 0x9b_00_00_00 .|. shift m 16 .|. shift a 10 .|. shift n 5 .|. d
 
+-- https://developer.arm.com/documentation/den0024/a/The-A64-instruction-set/Data-processing-instructions/Conditional-instructions
 bcond :: Word32 -> String -> RelocatableWriter ()
 bcond f label = do
   relLabel <- addUniqueLabel "code"
   addRelocatableInstruction $ \rt ->
     0x54_00_00_00 .|. shift (getWordRelative rt label relLabel .&. 0x00_07_FF_FF) 5 .|. f
 
+tbz :: Word32 -> Word32 -> String -> RelocatableWriter ()
+tbz t bit label = do
+  relLabel <- addUniqueLabel "code"
+  addRelocatableInstruction $ \rt ->
+    0x36_00_00_00 .|. shift (shift bit (-4) .&. 1) 31 .|. shift (bit .&. 0x1f) 19 .|. shift (getWordRelative rt label relLabel .&. 0x00_00_1F_FF) 5 .|. t
+
 cmp :: Word32 -> Word32 -> RelocatableWriter ()
 cmp n m = addInstruction $ 0xeb_00_00_1f .|. shift m 16 .|. shift n 5
+
+lsri :: Word32 -> Word32 -> Word32 -> RelocatableWriter ()
+lsri rd rn imm = addInstruction $ 0xd3_40_fc_00 .|. shift (imm .&. 0x3f) 16 .|. shift rn 5 .|. rd
+
+lsli :: Word32 -> Word32 -> Word32 -> RelocatableWriter ()
+lsli rd rn imm = addInstruction $ 0xd3_40_00_00 .|. shift (64 - (imm .&. 0x3f)) 16 .|. shift (63 - (imm .&. 0x3f)) 10 .|. shift rn 5 .|. rd
 
 r0 :: Word32
 r0 = 0

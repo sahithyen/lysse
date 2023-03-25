@@ -1,4 +1,4 @@
-module STree (LAIdentifier (..), LAExpression (..), LAStatement (..)) where
+module STree (LAIdentifier (..), LAExpression (..), LAStatement (..), getIdentifiers) where
 
 import Data.Binary (Word64)
 
@@ -11,7 +11,16 @@ data LAExpression
   | LASubtraction LAExpression LAExpression
   | LAReference LAIdentifier
   | LAInteger Word64
-  deriving (Show)
+  deriving (Show, Eq)
 
-data LAStatement = LAOutput LAIdentifier | LAAssignment LAIdentifier LAExpression
-  deriving (Show)
+data LAStatement = LAInput LAIdentifier | LAOutput LAIdentifier | LAAssignment LAIdentifier LAExpression
+  deriving (Show, Eq)
+
+-- Identifier
+getIdentifiers :: [LAStatement] -> [String]
+getIdentifiers = concatMap getDefinedIdentifiers
+
+getDefinedIdentifiers :: LAStatement -> [String]
+getDefinedIdentifiers (LAInput _) = []
+getDefinedIdentifiers (LAOutput _) = []
+getDefinedIdentifiers (LAAssignment (LAIdentifier ident) _) = [ident]

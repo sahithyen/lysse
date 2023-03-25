@@ -1,7 +1,8 @@
 module Routines (routines) where
 
 import Code (call, createLabel, label, stacked)
-import Data (addDWord)
+import Data (addBuffer, addDWord)
+import Data.Binary (Word64)
 import Data.Foldable (sequenceA_)
 import Instructions
   ( addi,
@@ -34,7 +35,7 @@ import Macros (printMacro)
 import Relocation (RelocatableWriter)
 
 routines :: RelocatableWriter ()
-routines = sequenceA_ [printNumber, printChar, printDigit, printBinary]
+routines = sequenceA_ [printNumber, printChar, printDigit, printBinary, readLine 128]
 
 -- r0 = signed 64 bit number
 printNumber :: RelocatableWriter ()
@@ -145,5 +146,12 @@ printBinary = do
   bcond 0x1 loop
 
   printMacro "\n"
+
+  ret lr
+
+readLine :: Word64 -> RelocatableWriter ()
+readLine bufferSize = do
+  label "readNumber"
+  buf <- addBuffer bufferSize
 
   ret lr

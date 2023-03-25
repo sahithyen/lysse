@@ -13,7 +13,6 @@ import Instructions
   )
 import Relocation (RelocatableWriter)
 
--- r0 exit code
 exitMacro :: Word16 -> RelocatableWriter ()
 exitMacro exitCode = do
   movzx r0 exitCode

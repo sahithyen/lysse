@@ -1,4 +1,4 @@
-module Data (addByte, addWord, addDWord, addLabeledDWord, addString) where
+module Data (addByte, addWord, addDWord, addLabeledDWord, addString, addBuffer) where
 
 import Data.Binary (Word32, Word64, Word8, putWord8)
 import Data.Binary.Put (Put, putLazyByteString, putWord32le, putWord64le)
@@ -37,3 +37,6 @@ addString s = do
   where
     bs = encodeUtf8 . pack $ s
     bsl = fromIntegral $ BS.length bs
+
+addBuffer :: Word64 -> RelocatableWriter String
+addBuffer l = addData (mapM_ putWord8 [0 | _ <- [1 .. l]]) l 8

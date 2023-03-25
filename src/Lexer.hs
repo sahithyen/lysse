@@ -9,6 +9,10 @@ data Token
   | LTEqual
   | LTPlus
   | LTMinus
+  | LTTimes
+  | LTSlash
+  | LTLBracket
+  | LTRBracket
   | LTOutput
   deriving
     (Show, Eq)
@@ -37,7 +41,11 @@ getToken tokens (x : xs)
   | x == '=' = getToken (tokens ++ [LTEqual]) xs
   | x == '+' = getToken (tokens ++ [LTPlus]) xs
   | x == '-' = getToken (tokens ++ [LTMinus]) xs
+  | x == '*' = getToken (tokens ++ [LTTimes]) xs
+  | x == '/' = getToken (tokens ++ [LTSlash]) xs
   | x == '>' = getToken (tokens ++ [LTOutput]) xs
+  | x == '(' = getToken (tokens ++ [LTLBracket]) xs
+  | x == ')' = getToken (tokens ++ [LTRBracket]) xs
   | otherwise = getToken tokens xs
 
 llex :: String -> [Token]

@@ -89,6 +89,18 @@ expressionW rd (LASubtraction a_op b_op) =
       expressionW rd a_op
       expressionW rb b_op
       sub rd rd rb
+expressionW rd (LAMultiplication a_op b_op) =
+  withSpareRegister rd $ \rb ->
+    do
+      expressionW rd a_op
+      expressionW rb b_op
+      madd rd rd rb wzr
+expressionW rd (LADivision a_op b_op) =
+  withSpareRegister rd $ \rb ->
+    do
+      expressionW rd a_op
+      expressionW rb b_op
+      sdiv rd rd rb
 expressionW rd (LAReference (LAIdentifier ident)) = ldrlx rd $ getIdentifierLabel ident
 expressionW rd (LAInteger a) =
   do

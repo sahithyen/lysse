@@ -4,7 +4,7 @@ module Parser (parse, LAIdentifier (..), LAExpression (..), LAStatement (..)) wh
 
 import Control.Applicative (Alternative (..))
 import Data.List (nub)
-import Lexer (Token (LTEqual, LTIdentifier, LTInteger, LTMinus, LTOutput, LTPlus))
+import Lexer (Token (LTEqual, LTIdentifier, LTInteger, LTLBracket, LTMinus, LTOutput, LTPlus, LTRBracket, LTSlash, LTTimes))
 import STree
   ( LAExpression (..),
     LAIdentifier (..),
@@ -59,13 +59,6 @@ satisfy p = Parser $ \case
     Just a -> Right (a, rest)
     Nothing -> Left [Unexpected hd]
 
-may :: (t -> Maybe a) -> Parser t (Maybe a)
-may p = Parser $ \case
-  [] -> Right (Nothing, [])
-  hd : rest -> case p hd of
-    Just a -> Right (Just a, rest)
-    Nothing -> Right (Nothing, hd : rest)
-
 finished :: Parser i Bool
 finished = Parser $ \case
   [] -> Right (True, [])
@@ -86,10 +79,26 @@ equal = satisfy $ \case
   LTEqual -> Just ()
   _ -> Nothing
 
-mayOperator :: Parser Token (Maybe Token)
-mayOperator = may $ \case
+operator :: Parser Token Token
+operator = satisfy $ \case
   LTPlus -> Just LTPlus
   LTMinus -> Just LTMinus
+  _ -> Nothing
+
+productOperator :: Parser Token Token
+productOperator = satisfy $ \case
+  LTTimes -> Just LTTimes
+  LTSlash -> Just LTSlash
+  _ -> Nothing
+
+leftBracket :: Parser Token ()
+leftBracket = satisfy $ \case
+  LTLBracket -> Just ()
+  _ -> Nothing
+
+rightBracket :: Parser Token ()
+rightBracket = satisfy $ \case
+  LTRBracket -> Just ()
   _ -> Nothing
 
 out :: Parser Token ()
@@ -100,22 +109,66 @@ out = satisfy $ \case
 reference :: Parser Token LAExpression
 reference = LAReference <$> identifier
 
+-- https://stackoverflow.com/questions/50369121/bnf-grammar-associativity
+-- https://stackoverflow.com/questions/64879983/how-can-i-parse-the-left-associative-notation-of-ski-combinator-calculus
+-- https://deepsource.io/blog/monadic-parser-combinators/#combinators-for-repetition
 expression :: Parser Token LAExpression
 expression = do
-  expr <- estart
-  eend expr
+  op <- operand
+  prods <- many prod
+  pop <- foldProds op prods
+  terms <- many term
+  foldTerms pop terms
 
-estart :: Parser Token LAExpression
-estart = number <|> reference
+term :: Parser Token (Token, LAExpression)
+term = do
+  to <- operator
+  op <- operand
+  prods <- many prod
+  pop <- foldProds op prods
+  return (to, pop)
 
-eend :: LAExpression -> Parser Token LAExpression
-eend expr = do
-  res <- mayOperator
-  case res of
-    Nothing -> pure expr
-    Just LTPlus -> LAAddition expr <$> expression
-    Just LTMinus -> LASubtraction expr <$> expression
-    Just _ -> error "Unexpected matched token in eend"
+foldTerms :: LAExpression -> [(Token, LAExpression)] -> Parser Token LAExpression
+foldTerms op prods =
+  return $
+    foldl
+      ( \expr (o, t) -> case o of
+          LTPlus -> LAAddition expr t
+          LTMinus -> LASubtraction expr t
+          _ -> error "Unexpected matched token in eend"
+      )
+      op
+      prods
+
+prod :: Parser Token (Token, LAExpression)
+prod = do
+  po <- productOperator
+  op <- operand
+
+  return (po, op)
+
+operand :: Parser Token LAExpression
+operand =
+  ( do
+      leftBracket
+      expr <- expression
+      rightBracket
+      return expr
+  )
+    <|> number
+    <|> reference
+
+foldProds :: LAExpression -> [(Token, LAExpression)] -> Parser Token LAExpression
+foldProds op prods =
+  return $
+    foldl
+      ( \expr (o, t) -> case o of
+          LTTimes -> LAMultiplication expr t
+          LTSlash -> LADivision expr t
+          _ -> error "Unexpected matched token in eend"
+      )
+      op
+      prods
 
 assignmentStatement :: Parser Token LAStatement
 assignmentStatement = do

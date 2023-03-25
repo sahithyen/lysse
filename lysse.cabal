@@ -29,12 +29,14 @@ library
       Lib
       Parser
       STree
+      Code
       Data
       Elf
-      Executable
       Instructions
       LyGen
+      Macros
       Relocation
+      Routines
   other-modules:
       Paths_lysse
   hs-source-dirs:

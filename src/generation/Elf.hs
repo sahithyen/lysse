@@ -1,23 +1,29 @@
 {-# LANGUAGE NumericUnderscores #-}
 
-module Elf (ELFHeaderParameter (..), elfHeader, ELFProgramHeaderParameter (..), elfProgramHeader) where
+module Elf (generateElf) where
 
 import Data.Binary (Word16, Word64, Word8)
-import Data.Binary.Put (PutM, putWord16le, putWord32be, putWord32le, putWord64le, putWord8)
-import Relocation (SegmentType (..))
+import Data.Binary.Put (Put, putWord16le, putWord32be, putWord32le, putWord64le, putWord8)
+import Relocation
+  ( RelocatableWriter,
+    SegmentType (..),
+    addSegment,
+    executeRelocatableWriter,
+    resolveLabel,
+  )
 
 data ELFHeaderParameter = ELFHeaderParameter
   { executionEntryAddress :: Word64,
     programHeadersCount :: Word16
   }
 
-pad :: (Num a, Eq a) => Word8 -> a -> PutM ()
+pad :: (Num a, Eq a) => Word8 -> a -> Put
 pad _ 0 = pure ()
 pad v n = do
   pad v (n - 1)
   putWord8 v
 
-elfHeader :: ELFHeaderParameter -> PutM ()
+elfHeader :: ELFHeaderParameter -> Put
 elfHeader parameters = do
   -- e_ident (Magic)
   putWord32be 0x7f_45_4C_46 -- 0x7f, ELF
@@ -73,7 +79,7 @@ data ELFProgramHeaderParameter = ELFProgramHeaderParameter
     segmentType :: SegmentType
   }
 
-elfProgramHeader :: ELFProgramHeaderParameter -> PutM ()
+elfProgramHeader :: ELFProgramHeaderParameter -> Put
 elfProgramHeader parameters = do
   -- p_type
   putWord32le 0x01
@@ -105,3 +111,23 @@ elfProgramHeader parameters = do
 
   -- p_align
   putWord64le $ alignment parameters
+
+defineSegments :: Word64 -> Word64 -> [(String, SegmentType)] -> RelocatableWriter ()
+defineSegments _ _ [] = pure ()
+defineSegments o a ((sname, st) : ss) = do
+  addSegment sname o a st
+  defineSegments 0 a ss
+
+generateElf :: RelocatableWriter () -> Put
+generateElf routine = do
+  elfHeader $ ELFHeaderParameter entry (fromIntegral segmentCount)
+  mapM_ elfProgramHeader programParameters
+  putCode rt
+  where
+    segments = [("code", Exec), ("data", Data)]
+    segmentCount = fromIntegral $ Prelude.length segments
+    headerOffset = 0x40 + 0x38 * segmentCount
+    segmentAlignment = 4_096
+    (putCode, rt, st) = executeRelocatableWriter $ sequence_ [defineSegments headerOffset segmentAlignment segments, routine]
+    programParameters = fmap (\(ssize, soff, stype) -> ELFProgramHeaderParameter soff soff ssize ssize segmentAlignment stype) st
+    entry = resolveLabel rt "_start"

@@ -5,7 +5,7 @@ where
 
 import Data.Binary.Put (runPut)
 import Data.ByteString.Lazy as B (writeFile)
-import Executable (generate)
+import Elf (generateElf)
 import Lexer (llex)
 import LyGen (lysseProgram)
 import Parser (parse)
@@ -23,6 +23,6 @@ compile = do
 
   let program = case st of
         Left errors -> error $ show errors
-        Right (stmts, _) -> generate $ lysseProgram stmts
+        Right (stmts, _) -> generateElf $ lysseProgram stmts
 
   B.writeFile "ly" (runPut program)

@@ -66,7 +66,8 @@ statementsW :: [LAStatement] -> RelocatableWriter ()
 statementsW = mapM_ statementW
 
 statementW :: LAStatement -> RelocatableWriter ()
-statementW (LAInput ident) = error "n/a"
+statementW (LAInput (LAIdentifier _)) = do
+  error "input not implemented"
 statementW (LAOutput (LAIdentifier ident)) = do
   printRoutine $ ident ++ " = "
   ldrlx r0 $ getIdentifierLabel ident

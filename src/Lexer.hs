@@ -14,6 +14,7 @@ data Token
   | LTLBracket
   | LTRBracket
   | LTOutput
+  | LTInput
   deriving
     (Show, Eq)
 
@@ -44,6 +45,7 @@ getToken tokens (x : xs)
   | x == '*' = getToken (tokens ++ [LTTimes]) xs
   | x == '/' = getToken (tokens ++ [LTSlash]) xs
   | x == '>' = getToken (tokens ++ [LTOutput]) xs
+  | x == '<' = getToken (tokens ++ [LTInput]) xs
   | x == '(' = getToken (tokens ++ [LTLBracket]) xs
   | x == ')' = getToken (tokens ++ [LTRBracket]) xs
   | otherwise = getToken tokens xs

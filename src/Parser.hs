@@ -4,7 +4,7 @@ module Parser (parse, LAIdentifier (..), LAExpression (..), LAStatement (..)) wh
 
 import Control.Applicative (Alternative (..))
 import Data.List (nub)
-import Lexer (Token (LTEqual, LTIdentifier, LTInteger, LTLBracket, LTMinus, LTOutput, LTPlus, LTRBracket, LTSlash, LTTimes))
+import Lexer (Token (LTEqual, LTIdentifier, LTInput, LTInteger, LTLBracket, LTMinus, LTOutput, LTPlus, LTRBracket, LTSlash, LTTimes))
 import STree
   ( LAExpression (..),
     LAIdentifier (..),
@@ -101,6 +101,11 @@ rightBracket = satisfy $ \case
   LTRBracket -> Just ()
   _ -> Nothing
 
+in' :: Parser Token ()
+in' = satisfy $ \case
+  LTInput -> Just ()
+  _ -> Nothing
+
 out :: Parser Token ()
 out = satisfy $ \case
   LTOutput -> Just ()
@@ -176,13 +181,18 @@ assignmentStatement = do
   equal
   LAAssignment ident <$> expression
 
+inputStatement :: Parser Token LAStatement
+inputStatement = do
+  in'
+  LAInput <$> identifier
+
 outputStatement :: Parser Token LAStatement
 outputStatement = do
   out
   LAOutput <$> identifier
 
 statement :: Parser Token LAStatement
-statement = assignmentStatement <|> outputStatement
+statement = assignmentStatement <|> outputStatement <|> inputStatement
 
 statements :: Parser Token [LAStatement]
 statements = do

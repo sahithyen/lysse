@@ -6,7 +6,6 @@ import Data.Binary (Word32)
 import Instructions
   ( add,
     adr,
-    bl,
     ldrlx,
     lr,
     madd,

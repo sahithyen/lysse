@@ -1,5 +1,7 @@
-asdf = 100 - 220
-> asdf
+foo = 0
+bar = 0
+< foo
+< bar
+res = foo * bar
 
-foo = 300 + asdf
-> foo
+> res

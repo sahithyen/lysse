@@ -1,6 +1,6 @@
 module LyGen (lysseProgram) where
 
-import Code (stacked)
+import Code (call, stacked)
 import Data (addDWord, addLabeledDWord)
 import Data.Binary (Word32)
 import Instructions
@@ -8,6 +8,7 @@ import Instructions
     adr,
     bl,
     ldrlx,
+    lr,
     madd,
     r0,
     r1,
@@ -46,12 +47,15 @@ statementsW :: [LAStatement] -> RelocatableWriter ()
 statementsW = mapM_ statementW
 
 statementW :: LAStatement -> RelocatableWriter ()
-statementW (LAInput (LAIdentifier _)) = do
-  error "input not implemented"
+statementW (LAInput (LAIdentifier ident)) = do
+  printMacro $ "Enter value for " ++ ident ++ ": "
+  call [lr] "readNumber"
+  adr r1 $ getIdentifierLabel ident
+  stri r0 r1 0
 statementW (LAOutput (LAIdentifier ident)) = do
   printMacro $ ident ++ " = "
   ldrlx r0 $ getIdentifierLabel ident
-  bl "printNumber"
+  call [lr] "printNumber"
 statementW (LAAssignment (LAIdentifier ident) expr) = do
   expressionW r0 expr
   adr r1 $ getIdentifierLabel ident

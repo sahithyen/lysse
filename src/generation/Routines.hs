@@ -10,6 +10,8 @@ import Instructions
     b,
     bcond,
     cmp,
+    cmpi,
+    ldrbi,
     lr,
     lsli,
     madd,
@@ -22,6 +24,7 @@ import Instructions
     r2,
     r3,
     r4,
+    r5,
     r8,
     ret,
     sdiv,
@@ -35,7 +38,7 @@ import Macros (printMacro)
 import Relocation (RelocatableWriter)
 
 routines :: RelocatableWriter ()
-routines = sequenceA_ [printNumber, printChar, printDigit, printBinary, readLine 128]
+routines = sequenceA_ [printNumber, printChar, printDigit, printBinary, readLine 128, readNumber]
 
 -- r0 = signed 64 bit number
 printNumber :: RelocatableWriter ()
@@ -151,7 +154,70 @@ printBinary = do
 
 readLine :: Word64 -> RelocatableWriter ()
 readLine bufferSize = do
-  label "readNumber"
+  label "readLine"
   buf <- addBuffer bufferSize
+
+  movzx r0 0 -- stdin
+  adr r1 buf
+  movzx r2 (fromIntegral bufferSize)
+  movzx r8 63 -- read
+  svc 0
+
+  ret lr
+
+readNumber :: RelocatableWriter ()
+readNumber = do
+  label "readNumber"
+
+  call [lr] "readLine"
+
+  movzx r4 10
+
+  nosign <- createLabel
+
+  -- r5 => 0 = positive, 1 = negative
+  movzx r5 0
+
+  -- Check for sign (skip if not)
+  ldrbi r2 r1 0
+  cmpi r2 45
+  bcond 1 nosign
+
+  -- Switch to negative and move to next character
+  movzx r5 1
+  subi r0 r0 1
+  addi r1 r1 1
+
+  label nosign
+
+  -- Result calculated in r3
+  movzx r3 0
+
+  loop <- createLabel
+  label loop
+
+  ldrbi r2 r1 0
+
+  subi r2 r2 48
+
+  madd r3 r3 r4 r2
+
+  subi r0 r0 1
+  addi r1 r1 1
+
+  cmpi r0 1
+  bcond 0xc loop
+
+  -- move return value
+  mov r0 r3
+
+  -- if negative => two's complement
+  positive <- createLabel
+  cmpi r5 0
+  bcond 0 positive
+
+  neg r0 r0
+
+  label positive
 
   ret lr

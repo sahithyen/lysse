@@ -1,6 +1,6 @@
 {-# LANGUAGE NumericUnderscores #-}
 
-module Instructions (cmp, add, sub, neg, addi, subi, sdiv, madd, msub, lsri, lsli, movzw, movzx, mov, ldrlx, stri, ldri, stripre, svc, adr, lr, b, bl, tbz, ret, bcond, r0, r1, r2, r3, r4, r5, r6, r8, wzr, sp) where
+module Instructions (cmp, cmpi, add, sub, neg, addi, subi, sdiv, madd, msub, lsri, lsli, movzw, movzx, mov, ldrlx, stri, ldri, ldrbi, stripre, svc, adr, lr, b, bl, tbz, ret, bcond, r0, r1, r2, r3, r4, r5, r6, r8, wzr, sp) where
 
 import Data.Binary (Word16, Word32)
 import Data.Binary.Put (putWord32le)
@@ -51,6 +51,9 @@ stripre t n imm = addInstruction $ 0xf8_00_0c_00 .|. shift (fromIntegral imm .&.
 
 ldri :: Word32 -> Word32 -> Int16 -> RelocatableWriter ()
 ldri t n imm = addInstruction $ 0xf8_40_04_00 .|. shift (fromIntegral imm .&. 0x1ff) 12 .|. shift n 5 .|. t
+
+ldrbi :: Word32 -> Word32 -> Int16 -> RelocatableWriter ()
+ldrbi t n imm = addInstruction $ 0x38_40_04_00 .|. shift (fromIntegral imm .&. 0x1ff) 12 .|. shift n 5 .|. t
 
 svc :: Word16 -> RelocatableWriter ()
 svc imm = addInstruction $ (0xd4_00_00_01 :: Word32) .|. shift (fromIntegral imm :: Word32) 5
@@ -109,6 +112,9 @@ tbz t bit label = do
 
 cmp :: Word32 -> Word32 -> RelocatableWriter ()
 cmp n m = addInstruction $ 0xeb_00_00_1f .|. shift m 16 .|. shift n 5
+
+cmpi :: Word32 -> Int16 -> RelocatableWriter ()
+cmpi n imm = addInstruction $ 0xf1_00_00_1f .|. shift (fromIntegral imm .&. 0xfff) 10 .|. shift n 5
 
 lsri :: Word32 -> Word32 -> Word32 -> RelocatableWriter ()
 lsri rd rn imm = addInstruction $ 0xd3_40_fc_00 .|. shift (imm .&. 0x3f) 16 .|. shift rn 5 .|. rd

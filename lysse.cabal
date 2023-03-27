@@ -25,10 +25,8 @@ source-repository head
 
 library
   exposed-modules:
-      Lexer
       Lib
       LyParser
-      OldParser
       Parser
       STree
       Code

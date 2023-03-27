@@ -26,8 +26,6 @@ source-repository head
 library
   exposed-modules:
       Lib
-      LyParser
-      Parser
       STree
       Code
       Data
@@ -37,11 +35,14 @@ library
       Macros
       Relocation
       Routines
+      LyParser
+      Parser
   other-modules:
       Paths_lysse
   hs-source-dirs:
       src
       src/generation
+      src/parser
   ghc-options: -Wall -Wcompat -Widentities -Wincomplete-record-updates -Wincomplete-uni-patterns -Wmissing-export-lists -Wmissing-home-modules -Wpartial-fields -Wredundant-constraints
   build-depends:
       argparser

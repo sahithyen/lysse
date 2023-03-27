@@ -40,7 +40,7 @@ ghc-options:
 - -Wredundant-constraints
 
 library:
-  source-dirs: [src, src/generation]
+  source-dirs: [src, src/generation, src/parser]
 
 executables:
   lyc:

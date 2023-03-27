@@ -5,10 +5,17 @@ import Data.List (intercalate)
 
 -- https://www.microsoft.com/en-us/research/wp-content/uploads/2016/02/parsec-paper-letter.pdf
 
-type Pos = Word
+data Pos = Pos Word Word
+
+instance Show Pos where
+  show (Pos l c) = "line " ++ show l ++ ", column " ++ show c
 
 nextPos :: Pos -> Char -> Pos
-nextPos p _ = p + 1
+nextPos (Pos l _) '\n' = Pos (l + 1) 0
+nextPos (Pos l c) _ = Pos l (c + 1)
+
+initialPos :: Pos
+initialPos = Pos 1 1
 
 data State = S String Pos
   deriving (Show)
@@ -17,7 +24,7 @@ data Message = M Pos String [String]
 
 instance Show Message where
   show (M p u es) =
-    "parse error at char "
+    "parse error at "
       ++ show p
       ++ ":\n"
       ++ "unexpected "
@@ -53,7 +60,7 @@ instance Functor Parser where
         Error msg -> Consumed $ Error msg
 
 instance Applicative Parser where
-  pure a = P $ \state -> Empty (Ok a state (M 0 "" []))
+  pure a = P $ \state -> Empty (Ok a state (M initialPos "" []))
 
   -- TODO: Correct implementation?
   P pf <*> P pa = P $ \i ->
@@ -168,4 +175,4 @@ many1 p = do
   return (x : xs)
 
 parse :: String -> Parser a -> Either String a
-parse t p = replyToEither $ getReply (runParser p (S t 0))
+parse t p = replyToEither $ getReply (runParser p (S t initialPos))

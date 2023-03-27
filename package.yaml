@@ -1,10 +1,10 @@
 name:                lysse
 version:             0.1.0.0
-github:              "githubuser/lysse"
+github:              "sahithyen/lysse"
 license:             BSD3
-author:              "Author name here"
-maintainer:          "example@example.com"
-copyright:           "2023 Author name here"
+author:              "Sahithyen Kanaganayagam"
+maintainer:          "mail@sahithyen.com"
+copyright:           "2023 Sahithyen Kanaganayagam"
 
 extra-source-files:
 - README.md
@@ -26,6 +26,7 @@ dependencies:
 - containers
 - mtl
 - text
+- argparser
 
 ghc-options:
 - -Wall

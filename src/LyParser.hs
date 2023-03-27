@@ -1,143 +1,13 @@
-module LyParser (identifier) where
+module LyParser (parseLy) where
 
-import Control.Applicative (Alternative (empty, (<|>)))
+import Control.Applicative (Alternative (many), (<|>))
 import Data.Char (isAlpha, isDigit)
-
--- https://www.microsoft.com/en-us/research/wp-content/uploads/2016/02/parsec-paper-letter.pdf
-
-type Pos = Word
-
-nextPos :: Pos -> Char -> Pos
-nextPos p _ = p + 1
-
-data State = S String Pos
-  deriving (Show)
-
-data Message = M Pos String [String]
-  deriving (Show)
-
-data Reply a = Ok a State Message | Error Message
-  deriving (Show)
-
-data Consumed a = Consumed (Reply a) | Empty (Reply a)
-  deriving (Show)
-
-newtype Parser a = P {runParser :: State -> Consumed a}
-
-instance Functor Parser where
-  fmap :: (a -> b) -> Parser a -> Parser b
-  fmap f (P p) = P $ \state -> do
-    case p state of
-      Empty r -> case r of
-        Ok x rest msg -> Empty $ Ok (f x) rest msg
-        Error msg -> Empty $ Error msg
-      Consumed r -> case r of
-        Ok x rest msg -> Consumed $ Ok (f x) rest msg
-        Error msg -> Consumed $ Error msg
-
-instance Applicative Parser where
-  pure :: a -> Parser a
-  pure a = P $ \state -> Empty (Ok a state (M 0 "" []))
-
-  -- TODO: Correct implementation?
-  (<*>) :: Parser (a -> b) -> Parser a -> Parser b
-  P pf <*> P pa = P $ \input ->
-    case pf input of
-      Empty r -> case r of
-        Ok f rest _ -> case pa rest of
-          Empty r2 -> case r2 of
-            Ok a rest2 msg2 -> Empty $ Ok (f a) rest2 msg2
-            Error msg2 -> Empty (Error msg2)
-          Consumed r2 -> case r2 of
-            Ok a rest2 msg2 -> Consumed $ Ok (f a) rest2 msg2
-            Error msg2 -> Consumed $ Error msg2
-        Error msg -> Empty $ Error msg
-      Consumed r -> Consumed $ case r of
-        Ok f rest _ -> case pa rest of
-          Empty r2 -> case r2 of
-            Ok a rest2 msg2 -> Ok (f a) rest2 msg2
-            Error msg2 -> Error msg2
-          Consumed r2 -> case r2 of
-            Ok a rest2 msg2 -> Ok (f a) rest2 msg2
-            Error msg2 -> Error msg2
-        Error msg -> Error msg
-
-instance Monad Parser where
-  return :: a -> Parser a
-  return = pure
-
-  (>>=) :: Parser a -> (a -> Parser b) -> Parser b
-  P p >>= f = P $ \input -> case p input of
-    Empty reply1 ->
-      case reply1 of
-        Ok x rest _ -> runParser (f x) rest
-        Error msg -> Empty (Error msg)
-    Consumed reply1 ->
-      Consumed
-        ( case reply1 of
-            Ok x rest _ ->
-              case runParser (f x) rest of
-                Consumed reply2 -> reply2
-                Empty reply2 -> reply2
-            Error msg -> Error msg
-        )
-
-merge :: Message -> Message -> Message
-merge (M pos inp exp1) (M _ _ exp2) = M pos inp (exp1 ++ exp2)
-
-mergeOk :: a -> State -> Message -> Message -> Consumed a
-mergeOk x inp msg1 msg2 = Empty (Ok x inp (merge msg1 msg2))
-
-mergeError :: Message -> Message -> Consumed a
-mergeError msg1 msg2 = Empty (Error (merge msg1 msg2))
-
-instance Alternative Parser where
-  empty :: Parser a
-  empty = P $ \(S _ pos) -> Empty (Error (M pos "" []))
-
-  (<|>) :: Parser a -> Parser a -> Parser a
-  P l <|> P r = P $ \input ->
-    case l input of
-      Empty (Error msg1) -> case r input of
-        Empty (Error msg2) -> mergeError msg1 msg2
-        Empty (Ok x inp msg2) -> mergeOk x inp msg1 msg2
-        consumed -> consumed
-      Empty (Ok x inp msg1) -> case r input of
-        Empty (Error msg2) -> mergeError msg1 msg2
-        Empty (Ok _ _ msg2) -> mergeOk x inp msg1 msg2
-        consumed -> consumed
-      consumed -> consumed
-
-(<?>) :: Parser a -> String -> Parser a
-p <?> exp' = P $ \state ->
-  case runParser p state of
-    Empty (Error msg) ->
-      Empty (Error (expect msg exp'))
-    Empty (Ok x st msg) ->
-      Empty (Ok x st (expect msg exp'))
-    other -> other
-
-expect :: Message -> String -> Message
-expect (M pos inp _) exp' = M pos inp [exp']
-
-satisfy :: (Char -> Bool) -> Parser Char
-satisfy test = P $ \(S input pos) ->
-  case input of
-    (c : cs)
-      | test c ->
-          let newPos = nextPos pos c
-              newState = S cs newPos
-           in seq
-                newPos
-                ( Consumed
-                    ( Ok
-                        c
-                        newState
-                        (M pos [] [])
-                    )
-                )
-      | otherwise -> Empty (Error (M pos [c] []))
-    [] -> Empty (Error (M pos "end of input" []))
+import Parser (Parser, finished, many1, parse, satisfy, (<?>))
+import STree
+  ( LAExpression (..),
+    LAIdentifier (LAIdentifier),
+    LAStatement (..),
+  )
 
 char :: Char -> Parser Char
 char c = satisfy (== c) <?> show c
@@ -148,23 +18,220 @@ letter = satisfy isAlpha <?> "letter"
 digit :: Parser Char
 digit = satisfy isDigit <?> "digit"
 
-string :: String -> Parser ()
-string [] = pure ()
-string (c : cs) =
+whitespace :: Parser ()
+whitespace = do
+  _ <- (char ' ' <?> "space") <|> (char '\n' <?> "space")
+  return ()
+
+-- Tokens
+whitespaces :: Parser ()
+whitespaces = do
+  _ <- many whitespace
+  return () <?> "whitespace"
+
+identifier :: Parser LAIdentifier
+identifier =
+  ( do
+      x <- letter <|> (char '_' <?> "underscore")
+      xs <- many (letter <|> digit <|> (char '_' <?> "underscore"))
+      let ident = LAIdentifier (x : xs)
+      return ident
+  )
+    <?> "identifier"
+
+integer :: Parser Int
+integer =
   do
-    _ <- char c
-    string cs <?> (c : cs)
+    i <- many1 digit
+    return (read i) <?> "integer"
 
-many1 :: (Monad m, Alternative m) => m a -> m [a]
-many1 p = do
-  x <- p
-  xs <- many1 p <|> return []
-  return (x : xs)
+equal :: Parser ()
+equal = do
+  _ <- char '='
+  return ()
 
-try :: Parser a -> Parser a
-try (P p) = P $ \input -> case p input of
-  Consumed (Error msg) -> Empty (Error msg)
-  other -> other
+data TermOperator = Plus | Minus
 
-identifier :: Parser [Char]
-identifier = many1 (letter <|> digit <|> (char '_' <?> "underscore"))
+plus :: Parser TermOperator
+plus = do
+  _ <- char '+'
+  return Plus
+
+minus :: Parser TermOperator
+minus = do
+  _ <- char '-'
+  return Minus
+
+data FactorOperator = Times | Divide
+
+times :: Parser FactorOperator
+times = do
+  _ <- char '*'
+  return Times
+
+slash :: Parser FactorOperator
+slash = do
+  _ <- char '/'
+  return Divide
+
+leftBracket :: Parser ()
+leftBracket = do
+  _ <- char '('
+  return ()
+
+rightBracket :: Parser ()
+rightBracket = do
+  _ <- char ')'
+  return ()
+
+output :: Parser ()
+output = do
+  _ <- char '>'
+  return ()
+
+input :: Parser ()
+input = do
+  _ <- char '<'
+  return ()
+
+-- Rules
+
+number :: Parser LAExpression
+number = (LAInteger . fromIntegral <$> integer) <?> "number"
+
+reference :: Parser LAExpression
+reference = (LAReference <$> identifier) <?> "reference"
+
+operand :: Parser LAExpression
+operand =
+  bracketedExpression
+    <|> number
+    <|> reference
+
+-- https://stackoverflow.com/questions/50369121/bnf-grammar-associativity
+-- https://stackoverflow.com/questions/64879983/how-can-i-parse-the-left-associative-notation-of-ski-combinator-calculus
+-- https://deepsource.io/blog/monadic-parser-combinators/#combinators-for-repetition
+expression :: Parser LAExpression
+expression = do
+  op <- operand
+
+  whitespaces
+
+  prods <- many prod
+  pop <- foldProds op prods
+
+  whitespaces
+
+  terms <- many term
+  foldTerms pop terms
+
+bracketedExpression :: Parser LAExpression
+bracketedExpression =
+  ( do
+      leftBracket
+      whitespaces
+      expr <- expression
+      whitespaces
+      rightBracket
+      return expr
+  )
+    <?> "bracketed expression"
+
+termOperator :: Parser TermOperator
+termOperator = plus <|> minus
+
+term :: Parser (TermOperator, LAExpression)
+term = do
+  to <- termOperator
+  whitespaces
+
+  op <- operand
+  whitespaces
+
+  prods <- many prod
+  pop <- foldProds op prods
+  return (to, pop)
+
+foldTerms :: LAExpression -> [(TermOperator, LAExpression)] -> Parser LAExpression
+foldTerms op prods =
+  return $
+    foldl
+      ( \expr (o, t) -> case o of
+          Plus -> LAAddition expr t
+          Minus -> LASubtraction expr t
+      )
+      op
+      prods
+
+factorOperator :: Parser FactorOperator
+factorOperator = times <|> slash
+
+prod :: Parser (FactorOperator, LAExpression)
+prod = do
+  po <- factorOperator
+
+  whitespaces
+
+  op <- operand
+  return (po, op)
+
+foldProds :: LAExpression -> [(FactorOperator, LAExpression)] -> Parser LAExpression
+foldProds op prods =
+  return $
+    foldl
+      ( \expr (o, t) -> case o of
+          Times -> LAMultiplication expr t
+          Divide -> LADivision expr t
+      )
+      op
+      prods
+
+assignmentStatement :: Parser LAStatement
+assignmentStatement =
+  ( do
+      ident <- identifier
+      whitespaces
+
+      equal
+      whitespaces
+
+      LAAssignment ident <$> expression
+  )
+    <?> "assignment"
+
+inputStatement :: Parser LAStatement
+inputStatement =
+  ( do
+      input
+      whitespaces
+      LAInput <$> identifier
+  )
+    <?> "input command"
+
+outputStatement :: Parser LAStatement
+outputStatement =
+  ( do
+      output
+      whitespaces
+      LAOutput <$> identifier
+  )
+    <?> "output command"
+
+statement :: Parser LAStatement
+statement = assignmentStatement <|> outputStatement <|> inputStatement
+
+statements :: Parser [LAStatement]
+statements = do
+  whitespaces
+  f <- finished
+  if f
+    then do
+      return []
+    else do
+      stmt <- statement
+
+      stmts <- statements
+      return (stmt : stmts)
+
+parseLy :: String -> Either String [LAStatement]
+parseLy t = parse t statements

@@ -1,209 +1,171 @@
-{-# LANGUAGE LambdaCase #-}
+module Parser (Parser, Message, Consumed, nextPos, (<?>), satisfy, many1, parse, finished) where
 
-module Parser (parse, LAIdentifier (..), LAExpression (..), LAStatement (..)) where
+import Control.Applicative (Alternative (empty, (<|>)))
+import Data.List (intercalate)
 
-import Control.Applicative (Alternative (..))
-import Data.List (nub)
-import Lexer (Token (LTEqual, LTIdentifier, LTInput, LTInteger, LTLBracket, LTMinus, LTOutput, LTPlus, LTRBracket, LTSlash, LTTimes))
-import STree
-  ( LAExpression (..),
-    LAIdentifier (..),
-    LAStatement (..),
-  )
+-- https://www.microsoft.com/en-us/research/wp-content/uploads/2016/02/parsec-paper-letter.pdf
 
-data Error i
-  = EndOfInput
-  | Unexpected i
-  | Empty
-  deriving (Eq, Show)
+type Pos = Word
 
-newtype Parser i a = Parser
-  {runParser :: [i] -> Either [Error i] (a, [i])}
+nextPos :: Pos -> Char -> Pos
+nextPos p _ = p + 1
 
-instance Functor (Parser i) where
-  fmap f (Parser p) = Parser $ \input -> do
-    (output, rest) <- p input
-    pure (f output, rest)
+data State = S String Pos
+  deriving (Show)
 
-instance Applicative (Parser i) where
-  pure a = Parser $ \input -> Right (a, input)
+data Message = M Pos String [String]
 
-  Parser f <*> Parser p = Parser $ \input -> do
-    (f', rest) <- f input
-    (output, rest') <- p rest
-    pure (f' output, rest')
+instance Show Message where
+  show (M p u es) =
+    "parse error at char "
+      ++ show p
+      ++ ":\n"
+      ++ "unexpected "
+      ++ u
+      ++ "\n"
+      ++ "expecting "
+      ++ intercalate ", " es
 
-instance Monad (Parser i) where
+data Reply a = Ok a State Message | Error Message
+  deriving (Show)
+
+replyToEither :: Reply b -> Either String b
+replyToEither (Ok r _ _) = Right r
+replyToEither (Error m) = Left $ show m
+
+data Consumed a = Consumed (Reply a) | Empty (Reply a)
+  deriving (Show)
+
+getReply :: Consumed a -> Reply a
+getReply (Consumed r) = r
+getReply (Empty r) = r
+
+newtype Parser a = P {runParser :: State -> Consumed a}
+
+instance Functor Parser where
+  fmap f (P p) = P $ \state -> do
+    case p state of
+      Empty r -> case r of
+        Ok x rest msg -> Empty $ Ok (f x) rest msg
+        Error msg -> Empty $ Error msg
+      Consumed r -> case r of
+        Ok x rest msg -> Consumed $ Ok (f x) rest msg
+        Error msg -> Consumed $ Error msg
+
+instance Applicative Parser where
+  pure a = P $ \state -> Empty (Ok a state (M 0 "" []))
+
+  -- TODO: Correct implementation?
+  P pf <*> P pa = P $ \i ->
+    case pf i of
+      Empty r -> case r of
+        Ok f rest _ -> case pa rest of
+          Empty r2 -> case r2 of
+            Ok a rest2 msg2 -> Empty $ Ok (f a) rest2 msg2
+            Error msg2 -> Empty (Error msg2)
+          Consumed r2 -> case r2 of
+            Ok a rest2 msg2 -> Consumed $ Ok (f a) rest2 msg2
+            Error msg2 -> Consumed $ Error msg2
+        Error msg -> Empty $ Error msg
+      Consumed r -> Consumed $ case r of
+        Ok f rest _ -> case pa rest of
+          Empty r2 -> case r2 of
+            Ok a rest2 msg2 -> Ok (f a) rest2 msg2
+            Error msg2 -> Error msg2
+          Consumed r2 -> case r2 of
+            Ok a rest2 msg2 -> Ok (f a) rest2 msg2
+            Error msg2 -> Error msg2
+        Error msg -> Error msg
+
+instance Monad Parser where
   return = pure
 
-  Parser p >>= k = Parser $ \input -> do
-    (output, rest) <- p input
-    runParser (k output) rest
+  P p >>= f = P $ \i -> case p i of
+    Empty reply1 ->
+      case reply1 of
+        Ok x rest _ -> runParser (f x) rest
+        Error msg -> Empty (Error msg)
+    Consumed reply1 ->
+      Consumed
+        ( case reply1 of
+            Ok x rest _ ->
+              case runParser (f x) rest of
+                Consumed reply2 -> reply2
+                Empty reply2 -> reply2
+            Error msg -> Error msg
+        )
 
-instance Eq i => Alternative (Parser i) where
-  empty = Parser $ \_ -> Left [Empty]
+merge :: Message -> Message -> Message
+merge (M pos inp exp1) (M _ _ exp2) = M pos inp (exp1 ++ exp2)
 
-  Parser l <|> Parser r = Parser $ \input ->
-    case l input of
-      Left err ->
-        case r input of
-          Left err' -> Left $ nub $ err <> err'
-          Right (output, rest) -> Right (output, rest)
-      Right (output, rest) -> Right (output, rest)
+mergeOk :: a -> State -> Message -> Message -> Consumed a
+mergeOk x inp msg1 msg2 = Empty (Ok x inp (merge msg1 msg2))
 
--- If the next token
-satisfy :: (t -> Maybe a) -> Parser t a
-satisfy p = Parser $ \case
-  [] -> Left [EndOfInput]
-  hd : rest -> case p hd of
-    Just a -> Right (a, rest)
-    Nothing -> Left [Unexpected hd]
+mergeError :: Message -> Message -> Consumed a
+mergeError msg1 msg2 = Empty (Error (merge msg1 msg2))
 
-finished :: Parser i Bool
-finished = Parser $ \case
-  [] -> Right (True, [])
-  ts -> Right (False, ts)
+instance Alternative Parser where
+  empty = P $ \(S _ pos) -> Empty (Error (M pos "" []))
 
-identifier :: Parser Token LAIdentifier
-identifier = satisfy $ \case
-  LTIdentifier str -> Just (LAIdentifier str)
-  _ -> Nothing
+  P l <|> P r = P $ \i ->
+    case l i of
+      Empty (Error msg1) -> case r i of
+        Empty (Error msg2) -> mergeError msg1 msg2
+        Empty (Ok x inp msg2) -> mergeOk x inp msg1 msg2
+        consumed -> consumed
+      Empty (Ok x inp msg1) -> case r i of
+        Empty (Error msg2) -> mergeError msg1 msg2
+        Empty (Ok _ _ msg2) -> mergeOk x inp msg1 msg2
+        consumed -> consumed
+      consumed -> consumed
 
-number :: Parser Token LAExpression
-number = satisfy $ \case
-  LTInteger num -> Just (LAInteger num)
-  _ -> Nothing
+expect :: Message -> String -> Message
+expect (M pos inp _) exp' = M pos inp [exp']
 
-equal :: Parser Token ()
-equal = satisfy $ \case
-  LTEqual -> Just ()
-  _ -> Nothing
+(<?>) :: Parser a -> String -> Parser a
+p <?> exp' = P $ \state ->
+  case runParser p state of
+    Empty (Error msg) ->
+      Empty (Error (expect msg exp'))
+    Empty (Ok x st msg) ->
+      Empty (Ok x st (expect msg exp'))
+    other -> other
 
-operator :: Parser Token Token
-operator = satisfy $ \case
-  LTPlus -> Just LTPlus
-  LTMinus -> Just LTMinus
-  _ -> Nothing
+finished :: Parser Bool
+finished =
+  P
+    ( \state ->
+        let (S i pos) = state
+         in case i of
+              "" -> Empty (Ok True state (M pos [] []))
+              _ -> Empty (Ok False state (M pos [] []))
+    )
+    <?> "end of input"
 
-productOperator :: Parser Token Token
-productOperator = satisfy $ \case
-  LTTimes -> Just LTTimes
-  LTSlash -> Just LTSlash
-  _ -> Nothing
+satisfy :: (Char -> Bool) -> Parser Char
+satisfy test = P $ \(S i pos) ->
+  case i of
+    (c : cs)
+      | test c ->
+          let newPos = nextPos pos c
+              newState = S cs newPos
+           in seq
+                newPos
+                ( Consumed
+                    ( Ok
+                        c
+                        newState
+                        (M pos [] [])
+                    )
+                )
+      | otherwise -> Empty (Error (M pos [c] []))
+    [] -> Empty (Error (M pos "end of input" []))
 
-leftBracket :: Parser Token ()
-leftBracket = satisfy $ \case
-  LTLBracket -> Just ()
-  _ -> Nothing
+many1 :: (Monad m, Alternative m) => m a -> m [a]
+many1 p = do
+  x <- p
+  xs <- many1 p <|> return []
+  return (x : xs)
 
-rightBracket :: Parser Token ()
-rightBracket = satisfy $ \case
-  LTRBracket -> Just ()
-  _ -> Nothing
-
-in' :: Parser Token ()
-in' = satisfy $ \case
-  LTInput -> Just ()
-  _ -> Nothing
-
-out :: Parser Token ()
-out = satisfy $ \case
-  LTOutput -> Just ()
-  _ -> Nothing
-
-reference :: Parser Token LAExpression
-reference = LAReference <$> identifier
-
--- https://stackoverflow.com/questions/50369121/bnf-grammar-associativity
--- https://stackoverflow.com/questions/64879983/how-can-i-parse-the-left-associative-notation-of-ski-combinator-calculus
--- https://deepsource.io/blog/monadic-parser-combinators/#combinators-for-repetition
-expression :: Parser Token LAExpression
-expression = do
-  op <- operand
-  prods <- many prod
-  pop <- foldProds op prods
-  terms <- many term
-  foldTerms pop terms
-
-term :: Parser Token (Token, LAExpression)
-term = do
-  to <- operator
-  op <- operand
-  prods <- many prod
-  pop <- foldProds op prods
-  return (to, pop)
-
-foldTerms :: LAExpression -> [(Token, LAExpression)] -> Parser Token LAExpression
-foldTerms op prods =
-  return $
-    foldl
-      ( \expr (o, t) -> case o of
-          LTPlus -> LAAddition expr t
-          LTMinus -> LASubtraction expr t
-          _ -> error "Unexpected matched token in eend"
-      )
-      op
-      prods
-
-prod :: Parser Token (Token, LAExpression)
-prod = do
-  po <- productOperator
-  op <- operand
-
-  return (po, op)
-
-operand :: Parser Token LAExpression
-operand =
-  ( do
-      leftBracket
-      expr <- expression
-      rightBracket
-      return expr
-  )
-    <|> number
-    <|> reference
-
-foldProds :: LAExpression -> [(Token, LAExpression)] -> Parser Token LAExpression
-foldProds op prods =
-  return $
-    foldl
-      ( \expr (o, t) -> case o of
-          LTTimes -> LAMultiplication expr t
-          LTSlash -> LADivision expr t
-          _ -> error "Unexpected matched token in eend"
-      )
-      op
-      prods
-
-assignmentStatement :: Parser Token LAStatement
-assignmentStatement = do
-  ident <- identifier
-  equal
-  LAAssignment ident <$> expression
-
-inputStatement :: Parser Token LAStatement
-inputStatement = do
-  in'
-  LAInput <$> identifier
-
-outputStatement :: Parser Token LAStatement
-outputStatement = do
-  out
-  LAOutput <$> identifier
-
-statement :: Parser Token LAStatement
-statement = assignmentStatement <|> outputStatement <|> inputStatement
-
-statements :: Parser Token [LAStatement]
-statements = do
-  f <- finished
-  if f
-    then do
-      return []
-    else do
-      stmt <- statement
-      stmts <- statements
-      return (stmt : stmts)
-
-parse :: [Token] -> Either [Error Token] ([LAStatement], [Token])
-parse = runParser statements
+parse :: String -> Parser a -> Either String a
+parse t p = replyToEither $ getReply (runParser p (S t 0))

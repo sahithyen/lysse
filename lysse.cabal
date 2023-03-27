@@ -28,6 +28,7 @@ library
       Lexer
       Lib
       LyParser
+      OldParser
       Parser
       STree
       Code

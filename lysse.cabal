@@ -35,6 +35,10 @@ library
       Macros
       Relocation
       Routines
+      Instructions_amd64
+      LyGen_amd64
+      Macros_amd64
+      Routines_amd64
       LyParser
       Parser
   other-modules:
@@ -42,6 +46,7 @@ library
   hs-source-dirs:
       src
       src/generation
+      src/generation/amd64
       src/parser
   ghc-options: -Wall -Wcompat -Widentities -Wincomplete-record-updates -Wincomplete-uni-patterns -Wmissing-export-lists -Wmissing-home-modules -Wpartial-fields -Wredundant-constraints
   build-depends:

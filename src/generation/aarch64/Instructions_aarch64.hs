@@ -1,6 +1,6 @@
 {-# LANGUAGE NumericUnderscores #-}
 
-module Instructions (cmp, cmpi, add, sub, neg, addi, subi, sdiv, madd, msub, lsri, lsli, movzw, movzx, mov, ldrlx, stri, ldri, ldrbi, stripre, svc, adr, lr, b, bl, tbz, ret, bcond, r0, r1, r2, r3, r4, r5, r6, r8, wzr, sp) where
+module Instructions_aarch64 (cmp, cmpi, add, sub, neg, addi, subi, sdiv, madd, msub, lsri, lsli, movzw, movzx, mov, ldrlx, stri, ldri, ldrbi, stripre, svc, adr, lr, b, bl, tbz, ret, bcond, r0, r1, r2, r3, r4, r5, r6, r8, wzr, sp) where
 
 import Data.Binary (Word16, Word32)
 import Data.Binary.Put (putWord32le)

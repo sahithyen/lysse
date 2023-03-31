@@ -3,6 +3,7 @@ module Lib
   )
 where
 
+import Architecture (Architecture (..))
 import Control.Monad (when)
 import Data.Binary.Put (runPut)
 import Data.ByteString.Lazy as B (writeFile)
@@ -24,7 +25,7 @@ import System.Console.ArgParser
   )
 import System.IO (IOMode (ReadMode), hGetContents, openFile)
 
-data LycArgs = Args {source :: String, output :: String, showSt :: Bool}
+data LycArgs = Args {source :: String, output :: String, target :: String, showSt :: Bool}
 
 lycArgsParser :: ParserSpec LycArgs
 lycArgsParser =
@@ -33,12 +34,14 @@ lycArgsParser =
     `Descr` "Path to input Lysse code"
     `andBy` reqPos "output"
     `Descr` "Output path of the generated executable"
+    `andBy` reqPos "arch"
+    `Descr` "Target architecture (amd64, aarch64)"
     `andBy` boolFlag "show-syntax-tree"
     `Descr` "Prints the syntax tree generated from the input Lysse code"
 
 lycInterface :: IO (CmdLnInterface LycArgs)
 lycInterface =
-  (`setAppDescr` "Compiles lysse code to a Linux executable (aarch64)")
+  (`setAppDescr` "Compiles lysse code to a Linux executable")
     <$> mkApp lycArgsParser
 
 entry :: IO ()
@@ -62,13 +65,21 @@ compile args = do
       putStr $ showStatements ss
     _ -> putStrLn "unable to show syntax tree"
 
-  case st of
-    Left e ->
-      do
-        putStrLn e
-    Right ss ->
-      do
-        -- Generate
-        let program = lysseProgram ss
-        let elf = generateElf program
-        B.writeFile (output args) (runPut elf)
+  let ma = case target args of
+        "amd64" -> Just Amd64
+        "aarch64" -> Just Aarch64
+        _ -> Nothing
+
+  case ma of
+    Just arch ->
+      case st of
+        Left e ->
+          do
+            putStrLn e
+        Right ss ->
+          do
+            -- Generate
+            let program = lysseProgram arch ss
+            let elf = generateElf arch program
+            B.writeFile (output args) (runPut elf)
+    Nothing -> putStrLn "Unknown architecture (possible architectures: amd64 / aarch64)"

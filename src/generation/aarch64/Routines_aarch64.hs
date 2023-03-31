@@ -1,10 +1,10 @@
-module Routines (routines) where
+module Routines_aarch64 (routines) where
 
-import Code (call, createLabel, label, stacked)
+import Code_aarch64 (call, createLabel, label, stacked)
 import Data (addBuffer, addDWord)
 import Data.Binary (Word64)
 import Data.Foldable (sequenceA_)
-import Instructions
+import Instructions_aarch64
   ( addi,
     adr,
     b,
@@ -34,7 +34,7 @@ import Instructions
     tbz,
     wzr,
   )
-import Macros (printMacro)
+import Macros_aarch64 (printMacro)
 import Relocation (RelocatableWriter)
 
 routines :: RelocatableWriter ()

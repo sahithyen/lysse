@@ -2,6 +2,7 @@
 
 module Elf (generateElf) where
 
+import Architecture (Architecture (Aarch64, Amd64))
 import Data.Binary (Word16, Word64, Word8)
 import Data.Binary.Put (Put, putWord16le, putWord32be, putWord32le, putWord64le, putWord8)
 import Relocation
@@ -14,7 +15,8 @@ import Relocation
 
 data ELFHeaderParameter = ELFHeaderParameter
   { executionEntryAddress :: Word64,
-    programHeadersCount :: Word16
+    programHeadersCount :: Word16,
+    architecture :: Architecture
   }
 
 pad :: (Num a, Eq a) => Word8 -> a -> Put
@@ -36,7 +38,11 @@ elfHeader parameters = do
   putWord16le 0x03 -- Executable
 
   -- e_machine
-  putWord16le 0xB7 -- aarch64
+  putWord16le
+    ( case architecture parameters of
+        Aarch64 -> 0xB7
+        Amd64 -> 0x3E
+    )
 
   -- e_version
   putWord32le 0x01
@@ -118,9 +124,9 @@ defineSegments o a ((sname, st) : ss) = do
   addSegment sname o a st
   defineSegments 0 a ss
 
-generateElf :: RelocatableWriter () -> Put
-generateElf routine = do
-  elfHeader $ ELFHeaderParameter entry (fromIntegral segmentCount)
+generateElf :: Architecture -> RelocatableWriter () -> Put
+generateElf arch routine = do
+  elfHeader $ ELFHeaderParameter entry (fromIntegral segmentCount) arch
   mapM_ elfProgramHeader programParameters
   putCode rt
   where

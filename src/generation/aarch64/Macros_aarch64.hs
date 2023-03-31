@@ -1,8 +1,8 @@
-module Macros (exitMacro, printMacro) where
+module Macros_aarch64 (exitMacro, printMacro) where
 
 import Data (addString)
 import Data.Binary (Word16)
-import Instructions
+import Instructions_aarch64
   ( adr,
     movzx,
     r0,

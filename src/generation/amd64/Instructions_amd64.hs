@@ -1,11 +1,12 @@
 {-# LANGUAGE LambdaCase #-}
 
-module Instructions_amd64 (nop, movImm, syscall, leaRipRel, Register (..)) where
+module Instructions_amd64 (nop, indirectStore, movImm, addImm32, syscall, leaRipRel, Register (..), call, ret, push, pop) where
 
 import Code_amd64 (createLabel, label)
 import Data.Binary (Put, Word32, Word64, Word8, putWord8)
-import Data.Binary.Put (putWord16be, putWord16le, putWord32le)
+import Data.Binary.Put (putInt32le, putWord16be, putWord16le, putWord32le)
 import Data.Bits (shift, (.|.))
+import Data.Int (Int32)
 import Relocation (Relocatable (Relocatable), RelocatableWriter, RelocationTable, addRelocatable, getRelativeAddress)
 
 getRelative :: RelocationTable -> String -> String -> Word32
@@ -30,8 +31,61 @@ movImm r imm =
     5
     1
 
+push :: Register -> RelocatableWriter ()
+push r =
+  addInstruction
+    (putWord8 (0x50 .|. encodeRegister r))
+    1
+    1
+
+pop :: Register -> RelocatableWriter ()
+pop r =
+  addInstruction
+    (putWord8 (0x58 .|. encodeRegister r))
+    1
+    1
+
+addImm32 :: Register -> Int32 -> RelocatableWriter ()
+addImm32 rd imm =
+  addInstruction
+    ( do
+        putWord8 0x48
+        putWord8 0x81
+        modrm RegisterAddressing RA rd
+        putInt32le imm
+    )
+    5
+    1
+
+indirectStore :: Register -> Register -> RelocatableWriter ()
+indirectStore rd rs =
+  addInstruction
+    ( do
+        putWord8 0x48
+        putWord8 0x89
+        modrm RegisterIndirect rs rd
+    )
+    3
+    1
+
 syscall :: RelocatableWriter ()
 syscall = addInstruction (putWord16be 0x0f05) 2 1
+
+call :: String -> RelocatableWriter ()
+call dest = do
+  rel <- createLabel
+  addRelocatableInstruction
+    ( \rt ->
+        do
+          putWord8 0xE8
+          putWord32le $ getRelative rt dest rel
+    )
+    5
+    1
+  label rel
+
+ret :: RelocatableWriter ()
+ret = addInstruction (putWord8 0xc3) 1 1
 
 leaRipRel :: Register -> String -> RelocatableWriter ()
 leaRipRel rd dest = do

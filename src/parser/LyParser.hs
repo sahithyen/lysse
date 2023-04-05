@@ -173,6 +173,9 @@ prod = do
   whitespaces
 
   op <- operand
+
+  whitespaces
+
   return (po, op)
 
 foldProds :: LAExpression -> [(FactorOperator, LAExpression)] -> Parser LAExpression

@@ -1,7 +1,8 @@
 module LyGen_aarch64 (lysseProgramAarch64) where
 
 import Allocator (allocator, getIdentifierLabel)
-import Code_aarch64 (call, label, stacked)
+import Code (label)
+import Code_aarch64 (call, stacked)
 import Data (addDWord)
 import Data.Binary (Word32)
 import Instructions_aarch64

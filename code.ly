@@ -1,7 +1,9 @@
-foo = 0
+foo = 20
 bar = 0
-< foo
 < bar
-res = foo * bar
 
+res = foo / bar * 2 + 2
+
+> foo
+> bar
 > res

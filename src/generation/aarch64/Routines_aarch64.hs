@@ -1,6 +1,7 @@
 module Routines_aarch64 (routines) where
 
-import Code_aarch64 (call, createLabel, label, stacked)
+import Code (createLabel, label)
+import Code_aarch64 (call, stacked)
 import Data (addBuffer, addDWord)
 import Data.Binary (Word64)
 import Data.Foldable (sequenceA_)
@@ -59,7 +60,7 @@ printNumber = do
   label maxDigitLoop
   madd r1 r1 r2 wzr
   cmp r1 r0
-  bcond 0xd maxDigitLoop
+  bcond 0xd maxDigitLoop -- lte
   sdiv r1 r1 r2
 
   -- If beginning number smaller than 10 then we only need to print one digit

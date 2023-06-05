@@ -29,6 +29,7 @@ library
       STree
       Allocator
       Architecture
+      Code
       Data
       Elf
       LyGen

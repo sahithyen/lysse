@@ -1,14 +1,8 @@
-module Code_aarch64 (createLabel, label, call, stacked) where
+module Code_aarch64 (call, stacked) where
 
 import Data.Binary (Word32)
 import Instructions_aarch64 (bl, ldri, sp, stripre)
-import Relocation (RelocatableWriter, addLabel, getUniqueLabel)
-
-createLabel :: RelocatableWriter String
-createLabel = getUniqueLabel
-
-label :: String -> RelocatableWriter ()
-label = addLabel "code"
+import Relocation (RelocatableWriter)
 
 call :: [Word32] -> String -> RelocatableWriter ()
 call rs l = stacked rs $ bl l

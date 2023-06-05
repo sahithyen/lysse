@@ -2,25 +2,20 @@
 
 .globl _start
 _start:
-    lea      message(%rip), %rsi
-    mov      $2, %rdi
-    add      $0x7fffffff, %rdi
-    mov      %rdi, (%rsi)
+    mov $60, %rdi
+    mov $60, %rax
 
-    push    %rbp
-    call exit
+    mov %rdi, %rax
 
-    mov      $1, %rax
-    mov      $1, %rdi
-    mov      $1, %rdx
+    cmp %rdi, %rax
+    jle exit1
+
+exit0:
+    mov $0, %rdi
+    mov $60, %rax
     syscall
 
-exit:
-    mov $0, %edi
-    mov $60, %eax
+exit1:
+    mov $1, %rdi
+    mov $60, %rax
     syscall
-    ret
-
-.data
-message:
-    .word  0

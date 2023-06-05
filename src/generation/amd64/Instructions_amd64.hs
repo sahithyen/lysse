@@ -1,8 +1,8 @@
 {-# LANGUAGE LambdaCase #-}
 
-module Instructions_amd64 (nop, indirectStore, movImm, addImm32, syscall, leaRipRel, Register (..), call, ret, push, pop) where
+module Instructions_amd64 (nop, indirectStore, movImm, mov, addImm32, subImm32, syscall, leaRipRel, Register (..), call, ret, js, jns, jle, imul, neg, push, pop, test, cmp) where
 
-import Code_amd64 (createLabel, label)
+import Code (createLabel, label)
 import Data.Binary (Put, Word32, Word64, Word8, putWord8)
 import Data.Binary.Put (putInt32le, putWord16be, putWord16le, putWord32le)
 import Data.Bits (shift, (.|.))
@@ -21,6 +21,17 @@ addInstruction p = addRelocatableInstruction (const p)
 nop :: RelocatableWriter ()
 nop = addInstruction (putWord16le 0x90) 1 1
 
+mov :: Register -> Register -> RelocatableWriter ()
+mov r0 r1 =
+  addInstruction
+    ( do
+        putWord8 0x48
+        putWord8 0x89
+        modrm RegisterAddressing r0 r1
+    )
+    3
+    1
+
 movImm :: Register -> Word32 -> RelocatableWriter ()
 movImm r imm =
   addInstruction
@@ -29,6 +40,78 @@ movImm r imm =
         putWord32le imm
     )
     5
+    1
+
+test :: Register -> Register -> RelocatableWriter ()
+test r0 r1 =
+  addInstruction
+    ( do
+        putWord8 0x48
+        putWord8 0x85
+        modrm RegisterAddressing r0 r1
+    )
+    3
+    1
+
+cmp :: Register -> Register -> RelocatableWriter ()
+cmp r0 r1 =
+  addInstruction
+    ( do
+        putWord8 0x48
+        putWord8 0x39
+        modrm RegisterAddressing r0 r1
+    )
+    3
+    1
+
+js :: String -> RelocatableWriter ()
+js dest = do
+  rel <- createLabel
+  addRelocatableInstruction
+    ( \rt ->
+        do
+          putWord8 0x78
+          putWord8 $ fromIntegral $ getRelative rt dest rel
+    )
+    2
+    1
+  label rel
+
+jns :: String -> RelocatableWriter ()
+jns dest = do
+  rel <- createLabel
+  addRelocatableInstruction
+    ( \rt ->
+        do
+          putWord8 0x79
+          putWord8 $ fromIntegral $ getRelative rt dest rel
+    )
+    2
+    1
+  label rel
+
+jle :: String -> RelocatableWriter ()
+jle dest = do
+  rel <- createLabel
+  addRelocatableInstruction
+    ( \rt ->
+        do
+          putWord8 0x7e
+          putWord8 $ fromIntegral $ getRelative rt dest rel
+    )
+    2
+    1
+  label rel
+
+neg :: Register -> RelocatableWriter ()
+neg r =
+  addInstruction
+    ( do
+        putWord8 0x48
+        putWord8 0xf7
+        modrm RegisterAddressing RB r
+    )
+    3
     1
 
 push :: Register -> RelocatableWriter ()
@@ -54,7 +137,30 @@ addImm32 rd imm =
         modrm RegisterAddressing RA rd
         putInt32le imm
     )
-    5
+    7
+    1
+
+subImm32 :: Register -> Int32 -> RelocatableWriter ()
+subImm32 rd imm =
+  addInstruction
+    ( do
+        putWord8 0x48
+        putWord8 0x81
+        modrm RegisterAddressing RBP rd
+        putInt32le imm
+    )
+    7
+    1
+
+imul :: Register -> RelocatableWriter ()
+imul r =
+  addInstruction
+    ( do
+        putWord8 0x48
+        putWord8 0xf7
+        modrm RegisterAddressing RBP r
+    )
+    3
     1
 
 indirectStore :: Register -> Register -> RelocatableWriter ()
